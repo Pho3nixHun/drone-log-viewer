@@ -1,17 +1,16 @@
-import L from 'leaflet'
 import type { DropPoint, Waypoint } from '../types/mission'
 
-export function getBounds(points: (DropPoint | Waypoint)[]): any | null {
+export function getBounds(points: (DropPoint | Waypoint)[]): [[number, number], [number, number]] | null {
   if (points.length === 0) return null
   
   const validPoints = points.filter(p => p.latitude !== 0 && p.longitude !== 0)
   if (validPoints.length === 0) return null
-  
+
   let minLat = validPoints[0].latitude
   let maxLat = validPoints[0].latitude
   let minLng = validPoints[0].longitude
   let maxLng = validPoints[0].longitude
-  
+
   validPoints.forEach(point => {
     minLat = Math.min(minLat, point.latitude)
     maxLat = Math.max(maxLat, point.latitude)
@@ -19,15 +18,16 @@ export function getBounds(points: (DropPoint | Waypoint)[]): any | null {
     maxLng = Math.max(maxLng, point.longitude)
   })
   
-  return L.latLngBounds([minLat, minLng], [maxLat, maxLng])
-}
-
-export function getMapCenter(points: (DropPoint | Waypoint)[]): [number, number] | null {
+  // Create bounds using array format which should work
+  return [[minLat, minLng], [maxLat, maxLng]]
+}export function getMapCenter(points: (DropPoint | Waypoint)[]): [number, number] | null {
   const bounds = getBounds(points)
   if (!bounds) return null
   
-  const center = bounds.getCenter()
-  return [center.lat, center.lng]
+  const [[minLat, minLng], [maxLat, maxLng]] = bounds
+  const centerLat = (minLat + maxLat) / 2
+  const centerLng = (minLng + maxLng) / 2
+  return [centerLat, centerLng]
 }
 
 export function parsePolygonString(polygonStr: string): [number, number][] {

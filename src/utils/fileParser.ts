@@ -121,7 +121,10 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
       averageAltitude: 0,
       minAltitude: 0,
       maxAltitude: 0,
-      averageSpeed: 0
+      averageSpeed: 0,
+      coveredAreaAcres: 0,
+      averageDropDistance: 0,
+      averageDropLineDistance: 0
     }
   }
   

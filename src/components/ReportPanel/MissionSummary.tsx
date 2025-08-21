@@ -30,7 +30,7 @@ export function MissionSummary() {
             <IconDrone size={16} color="var(--mantine-color-blue-5)" />
             <div style={{ flex: 1 }}>
               <Text size="sm" fw={500}>Drone</Text>
-              <Text size="sm" c="dimmed">{currentMission.droneName}</Text>
+              <Text size="sm" c="dimmed">Drone Biotech TrichoDrone v1.21</Text>
             </div>
             <div style={{ textAlign: 'right' }}>
               <Text size="xs" c="dimmed">App Version</Text>

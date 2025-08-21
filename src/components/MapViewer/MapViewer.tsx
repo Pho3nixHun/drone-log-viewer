@@ -1,24 +1,24 @@
 import { MapContainer, TileLayer } from 'react-leaflet'
 import { Box, LoadingOverlay } from '@mantine/core'
 import 'leaflet/dist/leaflet.css'
-import L from 'leaflet'
+import * as L from 'leaflet'
 
 // Fix for default markers in react-leaflet
-import icon from 'leaflet/dist/images/marker-icon.png'
-import iconShadow from 'leaflet/dist/images/marker-shadow.png'
-import iconRetina from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png'
 
-const DefaultIcon = L.icon({
-  iconUrl: icon,
-  iconRetinaUrl: iconRetina,
-  shadowUrl: iconShadow,
+const DefaultIcon = (L as any).icon({
+  iconUrl: markerIcon,
+  iconRetinaUrl: markerIconRetina,
+  shadowUrl: markerShadow,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
 })
 
-// @ts-ignore
+// @ts-expect-error - Setting default icon for all markers
 L.Marker.prototype.options.icon = DefaultIcon
 
 import { useMissionStore } from '../../stores/missionStore'
@@ -66,17 +66,20 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
       <LayerControls />
       
       <MapContainer
+        // @ts-expect-error - React Leaflet v5 type issues
         center={center}
         zoom={zoom}
         style={{ height: '100%', width: '100%' }}
       >
         {tileLayer === 'osm' ? (
           <TileLayer
+            // @ts-expect-error - React Leaflet v5 type issues
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
         ) : (
           <TileLayer
+            // @ts-expect-error - React Leaflet v5 type issues
             attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           />

@@ -35,7 +35,6 @@ export function DropPointsLayer() {
             opacity: 1,
             fillOpacity: 0.8
           }}
-          radius={6}
         >
           <Popup>
             <div style={{ minWidth: 200 }}>

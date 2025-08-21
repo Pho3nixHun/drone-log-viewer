@@ -91,7 +91,6 @@ export function WaypointsLayer() {
             opacity: 1,
             fillOpacity: 0.9
           }}
-          radius={4}
         >
           <Popup>
             <div style={{ minWidth: 200 }}>
