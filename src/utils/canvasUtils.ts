@@ -191,9 +191,8 @@ export function drawRulers(
   color: string = '#666666'
 ): void {
   ctx.fillStyle = color
-  ctx.font = '10px Arial'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
+  ctx.font = '8px Arial' // Smaller font
+  ctx.strokeStyle = color
   
   // Choose scale interval based on field size
   const maxDimension = Math.max(fieldWidthMeters, fieldHeightMeters)
@@ -204,27 +203,36 @@ export function drawRulers(
   else if (maxDimension < 1000) scaleInterval = 100
   else scaleInterval = 200
   
+  // Padding to keep text within canvas bounds
+  const textPadding = 20
+  
   // Draw horizontal ruler (bottom edge)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
   const startMetersX = Math.ceil(0 / scaleInterval) * scaleInterval
   for (let meters = startMetersX; meters <= fieldWidthMeters; meters += scaleInterval) {
     const x = (meters / fieldWidthMeters) * displayWidth
-    if (x >= 0 && x <= displayWidth) {
-      ctx.fillRect(x - 0.5, displayHeight - 15, 1, 10)
-      ctx.fillText(`${meters}m`, x, displayHeight - 5)
+    // Only draw if text won't go outside canvas bounds
+    if (x >= textPadding && x <= displayWidth - textPadding) {
+      // Smaller tick mark
+      ctx.fillRect(x - 0.5, displayHeight - 10, 1, 6)
+      // Text positioned above the tick mark
+      ctx.fillText(`${meters}m`, x, displayHeight - 12)
     }
   }
   
-  // Draw vertical ruler (left edge)
+  // Draw vertical ruler (left edge) 
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
   const startMetersY = Math.ceil(0 / scaleInterval) * scaleInterval
   for (let meters = startMetersY; meters <= fieldHeightMeters; meters += scaleInterval) {
     const y = displayHeight - (meters / fieldHeightMeters) * displayHeight
-    if (y >= 0 && y <= displayHeight) {
-      ctx.fillRect(0, y - 0.5, 10, 1)
-      ctx.save()
-      ctx.translate(15, y)
-      ctx.rotate(-Math.PI / 2)
-      ctx.fillText(`${meters}m`, 0, 0)
-      ctx.restore()
+    // Only draw if text won't go outside canvas bounds
+    if (y >= textPadding && y <= displayHeight - textPadding) {
+      // Smaller tick mark
+      ctx.fillRect(0, y - 0.5, 6, 1)
+      // Text positioned safely within canvas, horizontally oriented
+      ctx.fillText(`${meters}m`, 8, y)
     }
   }
 }

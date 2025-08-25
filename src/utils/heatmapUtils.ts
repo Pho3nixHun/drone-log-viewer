@@ -3,6 +3,12 @@
  */
 
 import type { FieldBounds } from './canvasUtils'
+import { 
+  initializeWebGPU, 
+  createHeatmapComputePipeline, 
+  createHeatmapBuffers,
+  type HeatmapParamsGPU 
+} from './webgpuUtils'
 
 export interface HeatmapParameters {
   sigma: number // Standard deviation in meters
@@ -287,5 +293,282 @@ export function getDensityAtPoint(
     density,
     normalizedDensity,
     approximateInsects
+  }
+}
+
+/**
+ * Calculate average insect density per square meter in a local area around a point
+ * @param canvasX X coordinate on canvas
+ * @param canvasY Y coordinate on canvas
+ * @param densityData Density map data
+ * @param insectsPerDrop Number of insects per drop point
+ * @param sampleAreaMeters Sample area size in square meters (default 1m²)
+ * @returns Object with area density information
+ */
+export function calculateLocalDensityPerArea(
+  canvasX: number,
+  canvasY: number,
+  densityData: DensityMapData,
+  insectsPerDrop: number,
+  sampleAreaMeters: number = 1
+): {
+  insectsPerSquareMeter: number
+  sampleAreaMeters: number
+  sampledPixels: number
+} {
+  // Convert sample area to pixel radius
+  // For circular area: area = π * r², so r = sqrt(area / π)
+  const sampleRadiusMeters = Math.sqrt(sampleAreaMeters / Math.PI)
+  const sampleRadiusPixels = Math.ceil(sampleRadiusMeters * densityData.pixelsPerMeter)
+  
+  let totalDensity = 0
+  let sampledPixels = 0
+  
+  // Sample pixels within the circular area
+  for (let dy = -sampleRadiusPixels; dy <= sampleRadiusPixels; dy++) {
+    for (let dx = -sampleRadiusPixels; dx <= sampleRadiusPixels; dx++) {
+      const pixelDistance = Math.sqrt(dx * dx + dy * dy)
+      
+      // Only sample pixels within the circular radius
+      if (pixelDistance <= sampleRadiusPixels) {
+        const sampleX = canvasX + dx
+        const sampleY = canvasY + dy
+        
+        // Check bounds
+        if (sampleX >= 0 && sampleX < densityData.canvasWidth && 
+            sampleY >= 0 && sampleY < densityData.canvasHeight) {
+          const pixelIndex = sampleY * densityData.canvasWidth + sampleX
+          totalDensity += densityData.densityData[pixelIndex] || 0
+          sampledPixels++
+        }
+      }
+    }
+  }
+  
+  if (sampledPixels === 0) {
+    return {
+      insectsPerSquareMeter: 0,
+      sampleAreaMeters,
+      sampledPixels: 0
+    }
+  }
+  
+  // Calculate average density in the sample area
+  const averageDensity = totalDensity / sampledPixels
+  
+  // Convert to insects per square meter
+  // averageDensity represents cumulative Gaussian contributions
+  // Multiply by insectsPerDrop to get actual insect count, then divide by area
+  const insectsPerSquareMeter = (averageDensity * insectsPerDrop) / sampleAreaMeters
+  
+  return {
+    insectsPerSquareMeter,
+    sampleAreaMeters,
+    sampledPixels
+  }
+}
+
+// WGSL Shader code for GPU computation
+const HEATMAP_SHADER_CODE = `
+// WGSL Compute Shader for Trichogramma Density Heatmap Calculation
+struct HeatmapParams {
+  canvasWidth: u32,
+  canvasHeight: u32,
+  sigma: f32,
+  maxDistance: f32,
+  insectsPerDrop: f32,
+  pixelsPerMeter: f32,
+  dropPointCount: u32,
+  boundedMinLat: f32,
+  boundedMaxLat: f32,
+  boundedMinLng: f32,
+  boundedMaxLng: f32,
+  boundedLatRange: f32,
+  boundedLngRange: f32,
+}
+
+@group(0) @binding(0) var<storage, read> dropPoints: array<vec2f>;
+@group(0) @binding(1) var<storage, read_write> densityMap: array<f32>;
+@group(0) @binding(2) var<uniform> params: HeatmapParams;
+
+fn calculateGPSDistanceFast(lat1: f32, lng1: f32, lat2: f32, lng2: f32) -> f32 {
+  let R: f32 = 6371000.0;
+  let toRad = 0.017453292519943295;
+  
+  let avgLat = (lat1 + lat2) * 0.5 * toRad;
+  let dLat = (lat2 - lat1) * toRad;
+  let dLng = (lng2 - lng1) * toRad * cos(avgLat);
+  
+  return R * sqrt(dLat * dLat + dLng * dLng);
+}
+
+@compute @workgroup_size(16, 16)
+fn computeDensity(@builtin(global_invocation_id) global_id: vec3u) {
+  let x = global_id.x;
+  let y = global_id.y;
+  
+  if (x >= params.canvasWidth || y >= params.canvasHeight) { return; }
+  
+  let pixelIndex = y * params.canvasWidth + x;
+  var totalDensity: f32 = 0.0;
+  
+  let lngProgress = f32(x) / f32(params.canvasWidth);
+  let latProgress = (f32(params.canvasHeight) - f32(y)) / f32(params.canvasHeight);
+  let pixelLng = params.boundedMinLng + (lngProgress * params.boundedLngRange);
+  let pixelLat = params.boundedMinLat + (latProgress * params.boundedLatRange);
+  
+  for (var i: u32 = 0; i < params.dropPointCount; i++) {
+    let dropPoint = dropPoints[i];
+    let distance = calculateGPSDistanceFast(pixelLat, pixelLng, dropPoint.x, dropPoint.y);
+    
+    if (distance <= params.maxDistance) {
+      let sigmaSquared = params.sigma * params.sigma;
+      let exponent = -(distance * distance) / (2.0 * sigmaSquared);
+      totalDensity += exp(exponent);
+    }
+  }
+  
+  densityMap[pixelIndex] = totalDensity;
+}
+`
+
+/**
+ * Calculate cumulative density map using GPU acceleration (WebGPU)
+ * Falls back to CPU calculation if WebGPU is not available
+ * @param dropPoints Array of valid drop points
+ * @param bounds Field bounds
+ * @param canvasWidth Canvas width in pixels
+ * @param canvasHeight Canvas height in pixels
+ * @param parameters Heatmap parameters
+ * @param onProgress Optional progress callback
+ * @returns Promise<DensityMapData>
+ */
+export async function calculateDensityMapGPU(
+  dropPoints: DropPoint[],
+  bounds: FieldBounds,
+  canvasWidth: number,
+  canvasHeight: number,
+  parameters: HeatmapParameters,
+  onProgress?: (current: number, total: number) => void
+): Promise<DensityMapData> {
+  // Initialize WebGPU
+  const webgpu = await initializeWebGPU()
+  
+  if (!webgpu) {
+    console.log('WebGPU not available, falling back to CPU')
+    return calculateDensityMapAsync(dropPoints, bounds, canvasWidth, canvasHeight, parameters, onProgress)
+  }
+
+  try {
+    const { device } = webgpu
+    
+    // Calculate meters to pixels conversion
+    const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } = calculateMetersToPixels(
+      bounds, 
+      canvasWidth, 
+      canvasHeight
+    )
+
+    // Prepare GPU parameters
+    const gpuParams: HeatmapParamsGPU = {
+      canvasWidth,
+      canvasHeight,
+      sigma: parameters.sigma,
+      maxDistance: parameters.maxDistance,
+      insectsPerDrop: parameters.insectsPerDrop,
+      pixelsPerMeter,
+      dropPointCount: dropPoints.length,
+      boundedMinLat: bounds.boundedMinLat,
+      boundedMaxLat: bounds.boundedMaxLat,
+      boundedMinLng: bounds.boundedMinLng,
+      boundedMaxLng: bounds.boundedMaxLng,
+      boundedLatRange: bounds.boundedLatRange,
+      boundedLngRange: bounds.boundedLngRange
+    }
+
+    // Create compute pipeline
+    const pipeline = createHeatmapComputePipeline(device, HEATMAP_SHADER_CODE)
+
+    // Create buffers
+    const buffers = createHeatmapBuffers(device, dropPoints, gpuParams)
+
+    // Create bind group
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: buffers.dropPointBuffer } },
+        { binding: 1, resource: { buffer: buffers.densityMapBuffer } },
+        { binding: 2, resource: { buffer: buffers.paramsBuffer } }
+      ]
+    })
+
+    // Dispatch compute shader
+    const commandEncoder = device.createCommandEncoder({ label: 'Heatmap Compute' })
+    const computePass = commandEncoder.beginComputePass({ label: 'Density Calculation' })
+    
+    computePass.setPipeline(pipeline)
+    computePass.setBindGroup(0, bindGroup)
+    
+    // Calculate workgroup dispatches (16x16 workgroup size)
+    const workgroupsX = Math.ceil(canvasWidth / 16)
+    const workgroupsY = Math.ceil(canvasHeight / 16)
+    computePass.dispatchWorkgroups(workgroupsX, workgroupsY)
+    computePass.end()
+
+    // Copy result to read buffer
+    commandEncoder.copyBufferToBuffer(
+      buffers.densityMapBuffer, 0,
+      buffers.readBuffer, 0,
+      buffers.densityMapBuffer.size
+    )
+
+    // Submit commands and wait for completion
+    const commandBuffer = commandEncoder.finish()
+    device.queue.submit([commandBuffer])
+
+    // Read results back to CPU
+    await buffers.readBuffer.mapAsync(GPUMapMode.READ)
+    const resultArrayBuffer = buffers.readBuffer.getMappedRange()
+    const resultData = new Float32Array(resultArrayBuffer.slice(0)) // Copy data
+    buffers.readBuffer.unmap()
+
+    // Find maximum density for normalization
+    let maxDensity = 0
+    for (const density of resultData) {
+      maxDensity = Math.max(maxDensity, density)
+    }
+
+    // Cleanup GPU resources
+    buffers.dropPointBuffer.destroy()
+    buffers.paramsBuffer.destroy()
+    buffers.densityMapBuffer.destroy()
+    buffers.readBuffer.destroy()
+
+    // Report completion
+    if (onProgress) {
+      onProgress(1, 1) // 100% complete
+    }
+
+    // GPU computation completed successfully
+
+    return {
+      densityData: resultData,
+      maxDensity,
+      canvasWidth,
+      canvasHeight,
+      boundedMinLat: bounds.boundedMinLat,
+      boundedMaxLat: bounds.boundedMaxLat,
+      boundedMinLng: bounds.boundedMinLng,
+      boundedMaxLng: bounds.boundedMaxLng,
+      boundedLatRange: bounds.boundedLatRange,
+      boundedLngRange: bounds.boundedLngRange,
+      pixelsPerMeter,
+      fieldWidthMeters,
+      fieldHeightMeters
+    }
+
+  } catch (error) {
+    console.error('GPU calculation failed, falling back to CPU:', error)
+    return calculateDensityMapAsync(dropPoints, bounds, canvasWidth, canvasHeight, parameters, onProgress)
   }
 }

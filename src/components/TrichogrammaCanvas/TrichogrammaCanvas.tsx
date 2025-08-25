@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Card, Text, Box, Button, Group, NumberInput, Grid, Paper, LoadingOverlay, Progress } from '@mantine/core'
+import { Card, Text, Box, Button, Group, NumberInput, Grid, Paper, LoadingOverlay, Progress, Switch, Tooltip } from '@mantine/core'
 import { IconChartDots, IconSettings } from '@tabler/icons-react'
 import { useMissionStore } from '../../stores/missionStore'
 import { applyThermalColors } from '../../utils/thermalColors'
@@ -14,9 +14,12 @@ import {
 import { 
   filterValidDropPoints,
   calculateDensityMapAsync,
+  calculateDensityMapGPU,
+  calculateLocalDensityPerArea,
   type HeatmapParameters,
   type DensityMapData 
 } from '../../utils/heatmapUtils'
+import { isWebGPUSupported } from '../../utils/webgpuUtils'
 
 export function TrichogrammaCanvas() {
   const { currentMission } = useMissionStore()
@@ -27,14 +30,16 @@ export function TrichogrammaCanvas() {
     x: number
     y: number
     density: number
-    insects: number
+    insectsPerSquareMeter: number
+    sampleAreaMeters: number
     coverage: string
   }>({
     visible: false,
     x: 0,
     y: 0,
     density: 0,
-    insects: 0,
+    insectsPerSquareMeter: 0,
+    sampleAreaMeters: 1,
     coverage: ''
   })
 
@@ -48,7 +53,51 @@ export function TrichogrammaCanvas() {
   const [isHeatmapGenerated, setIsHeatmapGenerated] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationProgress, setGenerationProgress] = useState(0)
+  const [webgpuSupported, setWebGPUSupported] = useState<boolean | undefined>(undefined)
+  const [useGPU, setUseGPU] = useState(true) // User preference for GPU acceleration
   
+  // Detect WebGPU support on component mount
+  useEffect(() => {
+    const supported = isWebGPUSupported()
+    
+    console.group('🔧 WebGPU Browser Support Check')
+    console.log('User Agent:', navigator.userAgent)
+    console.log('WebGPU support detected:', supported)
+    console.log('Navigator GPU:', 'gpu' in navigator ? 'Available' : 'Not available')
+    
+    if ('gpu' in navigator) {
+      console.log('Navigator GPU object:', navigator.gpu)
+      
+      // Test async adapter request
+      navigator.gpu.requestAdapter().then(adapter => {
+        if (adapter) {
+          console.log('✅ WebGPU adapter obtained:', adapter)
+          console.log('Adapter info:', adapter.info)
+          console.log('Adapter features:', Array.from(adapter.features))
+          console.log('Adapter limits:', adapter.limits)
+          // Update the supported state to true only if we have a working adapter
+          setWebGPUSupported(true)
+        } else {
+          console.log('❌ No WebGPU adapter available')
+          console.log('💡 Possible solutions:')
+          console.log('   1. Update GPU drivers')
+          console.log('   2. Enable chrome://flags/#enable-unsafe-webgpu')
+          console.log('   3. Check if running in VM/remote desktop')
+          console.log('   4. Try chrome://flags/#enable-webgpu-developer-features')
+          // Set to false since no adapter is available
+          setWebGPUSupported(false)
+        }
+      }).catch(error => {
+        console.error('❌ Error requesting WebGPU adapter:', error)
+        setWebGPUSupported(false)
+      })
+    } else {
+      // No WebGPU at all
+      setWebGPUSupported(false)
+    }
+    console.groupEnd()
+  }, [])
+
   // Initialize canvas with basic setup
   useEffect(() => {
     if (!currentMission?.flightLog.dropPoints || !canvasRef.current) return
@@ -96,7 +145,14 @@ export function TrichogrammaCanvas() {
   }
 
   const generateHeatmap = async () => {
-    if (!currentMission?.flightLog.dropPoints || !canvasRef.current) return
+    console.log('🔥 Generate heatmap button clicked!')
+    console.log('Current mission:', currentMission)
+    console.log('Canvas ref:', canvasRef.current)
+    
+    if (!currentMission?.flightLog.dropPoints || !canvasRef.current) {
+      console.log('❌ Missing requirements - currentMission or canvas ref')
+      return
+    }
     
     setIsGenerating(true)
     setGenerationProgress(0)
@@ -126,17 +182,40 @@ export function TrichogrammaCanvas() {
       // Clear canvas
       clearCanvas(ctx, dimensions.displayWidth, dimensions.displayHeight)
       
-      // Calculate density map with progress tracking
-      const densityData = await calculateDensityMapAsync(
-        validDropPoints,
-        bounds,
-        dimensions.canvasWidth,
-        dimensions.canvasHeight,
-        parameters,
-        (current, total) => {
-          setGenerationProgress(Math.round((current / total) * 100))
-        }
-      )
+      // Calculate density map - try GPU first if supported and enabled
+      const shouldUseGPU = webgpuSupported && useGPU && validDropPoints.length > 50 // Use GPU for larger datasets
+      
+      // Performance timing
+      const startTime = performance.now()
+      
+      console.log(`${shouldUseGPU ? '🚀 GPU' : '🐌 CPU'} computation for ${validDropPoints.length} points`)
+      
+      const densityData = shouldUseGPU 
+        ? await calculateDensityMapGPU(
+            validDropPoints,
+            bounds,
+            dimensions.canvasWidth,
+            dimensions.canvasHeight,
+            parameters,
+            (current, total) => {
+              setGenerationProgress(Math.round((current / total) * 100))
+            }
+          )
+        : await calculateDensityMapAsync(
+            validDropPoints,
+            bounds,
+            dimensions.canvasWidth,
+            dimensions.canvasHeight,
+            parameters,
+            (current, total) => {
+              setGenerationProgress(Math.round((current / total) * 100))
+            }
+          )
+          
+      const endTime = performance.now()
+      const duration = endTime - startTime
+      
+      console.log(`⏱️ ${shouldUseGPU ? 'GPU' : 'CPU'} completed in ${duration.toFixed(2)}ms`)
       
       // Create normalized density map for color mapping
       const normalizedDensityMap = new Float32Array(dimensions.canvasWidth * dimensions.canvasHeight)
@@ -191,8 +270,14 @@ export function TrichogrammaCanvas() {
     const density = densityMapRef.current.densityData[pixelIndex] || 0
     const normalizedDensity = density / densityMapRef.current.maxDensity
     
-    // Calculate approximate insect count using parameter
-    const approximateInsects = Math.round(density * parameters.insectsPerDrop)
+    // Calculate average insect density per square meter in local area
+    const areaAnalysis = calculateLocalDensityPerArea(
+      canvasX,
+      canvasY,
+      densityMapRef.current,
+      parameters.insectsPerDrop,
+      1 // Sample 1 square meter area
+    )
     
     // Calculate GPS coordinates
     const lngProgress = canvasX / densityMapRef.current.canvasWidth
@@ -207,7 +292,8 @@ export function TrichogrammaCanvas() {
       x: event.clientX,
       y: event.clientY,
       density: normalizedDensity,
-      insects: approximateInsects,
+      insectsPerSquareMeter: areaAnalysis.insectsPerSquareMeter,
+      sampleAreaMeters: areaAnalysis.sampleAreaMeters,
       coverage: `${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)}`
     })
   }
@@ -237,58 +323,108 @@ export function TrichogrammaCanvas() {
           
           <Grid>
             <Grid.Col span={6}>
-              <NumberInput
-                label="Sigma (σ)"
-                description="Standard deviation in meters"
-                value={parameters.sigma}
-                onChange={(value) => setParameters(prev => ({ ...prev, sigma: Number(value) || 5 }))}
-                disabled={isGenerating}
-                min={1}
-                max={50}
-                step={0.5}
-                size="sm"
-              />
+              <Tooltip
+                label="Controls how tightly insects are distributed around each drop point. Lower values = more concentrated, higher values = more spread out distribution."
+                multiline
+                withArrow
+              >
+                <NumberInput
+                  label="Sigma (σ)"
+                  description="Standard deviation in meters"
+                  value={parameters.sigma}
+                  onChange={(value) => setParameters(prev => ({ ...prev, sigma: Number(value) || 5 }))}
+                  disabled={isGenerating}
+                  min={1}
+                  max={50}
+                  step={0.5}
+                  size="sm"
+                />
+              </Tooltip>
             </Grid.Col>
             <Grid.Col span={6}>
-              <NumberInput
-                label="Max Distance"
-                description="Maximum spread in meters"
-                value={parameters.maxDistance}
-                onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
-                disabled={isGenerating}
-                min={5}
-                max={100}
-                step={5}
-                size="sm"
-              />
+              <Tooltip
+                label="Maximum distance insects can travel from drop points. Beyond this distance, insect density becomes negligible. Affects computation performance."
+                multiline
+                withArrow
+              >
+                <NumberInput
+                  label="Max Distance"
+                  description="Maximum spread in meters"
+                  value={parameters.maxDistance}
+                  onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
+                  disabled={isGenerating}
+                  min={5}
+                  max={100}
+                  step={5}
+                  size="sm"
+                />
+              </Tooltip>
             </Grid.Col>
             <Grid.Col span={6}>
-              <NumberInput
-                label="Insects/Drop"
-                description="Insects per drop point"
-                value={parameters.insectsPerDrop}
-                onChange={(value) => setParameters(prev => ({ ...prev, insectsPerDrop: Number(value) || 1200 }))}
-                disabled={isGenerating}
-                min={100}
-                max={5000}
-                step={100}
-                size="sm"
-              />
+              <Tooltip
+                label="Number of trichogramma insects released at each drop point. Higher values increase overall density calculations and tooltip insect counts."
+                multiline
+                withArrow
+              >
+                <NumberInput
+                  label="Insects/Drop"
+                  description="Insects per drop point"
+                  value={parameters.insectsPerDrop}
+                  onChange={(value) => setParameters(prev => ({ ...prev, insectsPerDrop: Number(value) || 1200 }))}
+                  disabled={isGenerating}
+                  min={100}
+                  max={5000}
+                  step={100}
+                  size="sm"
+                />
+              </Tooltip>
             </Grid.Col>
             <Grid.Col span={6}>
-              <NumberInput
-                label="Resolution"
-                description="Canvas resolution multiplier"
-                value={parameters.resolution}
-                onChange={(value) => setParameters(prev => ({ ...prev, resolution: Number(value) || 2 }))}
-                disabled={isGenerating}
-                min={1}
-                max={4}
-                step={1}
+              <Tooltip
+                label="Increases canvas rendering resolution for sharper heatmaps. Higher values provide better quality but require more computation time and memory."
+                multiline
+                withArrow
+              >
+                <NumberInput
+                  label="Resolution"
+                  description="Canvas resolution multiplier"
+                  value={parameters.resolution}
+                  onChange={(value) => setParameters(prev => ({ ...prev, resolution: Number(value) || 2 }))}
+                  disabled={isGenerating}
+                  min={1}
+                  max={4}
+                  step={1}
+                  size="sm"
+                />
+              </Tooltip>
+            </Grid.Col>
+            <Grid.Col span={12}>
+              <Switch
+                label="GPU Acceleration"
+                description={
+                  webgpuSupported === undefined
+                    ? "Checking WebGPU support..." 
+                    : webgpuSupported 
+                      ? "Use WebGPU for faster computation" 
+                      : "WebGPU not supported in this browser"
+                }
+                checked={useGPU && Boolean(webgpuSupported)}
+                onChange={(event) => setUseGPU(event.currentTarget.checked)}
+                disabled={!webgpuSupported || isGenerating}
                 size="sm"
               />
             </Grid.Col>
           </Grid>
+          
+          {/* WebGPU Status */}
+          {webgpuSupported !== undefined && (
+            <Box mt="xs">
+              <Text size="xs" c={webgpuSupported ? "teal" : "orange"}>
+                WebGPU: {webgpuSupported ? "✓ Supported" : "✗ Not available"}
+                {webgpuSupported && useGPU && " - GPU acceleration enabled"}
+              </Text>
+            </Box>
+          )}
           
           {/* Progress Bar */}
           {isGenerating && (
@@ -306,7 +442,14 @@ export function TrichogrammaCanvas() {
             </Text>
             <Button
               leftSection={<IconChartDots size={16} />}
-              onClick={generateHeatmap}
+              onClick={() => {
+                console.log('🔥 Button clicked - checking conditions')
+                console.log('Has mission:', !!currentMission)
+                console.log('Has dropPoints:', !!currentMission?.flightLog.dropPoints)
+                console.log('Drop points length:', currentMission?.flightLog.dropPoints?.length)
+                console.log('Is generating:', isGenerating)
+                generateHeatmap()
+              }}
               loading={isGenerating}
               disabled={!currentMission?.flightLog.dropPoints || isGenerating}
               size="sm"
@@ -316,7 +459,14 @@ export function TrichogrammaCanvas() {
           </Group>
         </Paper>
         
-        <Box style={{ width: '100%', position: 'relative' }}>
+        {/* Canvas - always present but hidden when no heatmap */}
+        <Box 
+          style={{ 
+            width: '100%', 
+            position: 'relative',
+            display: (isHeatmapGenerated || isGenerating) ? 'block' : 'none'
+          }}
+        >
           <LoadingOverlay visible={isGenerating} />
           
           <canvas
@@ -332,31 +482,31 @@ export function TrichogrammaCanvas() {
               cursor: isHeatmapGenerated ? 'crosshair' : 'default'
             }}
           />
-          
-          {/* Tooltip */}
-          {tooltip.visible && isHeatmapGenerated && (
-            <div
-              style={{
-                position: 'fixed',
-                left: tooltip.x + 10,
-                top: tooltip.y - 10,
-                backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                color: 'white',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                zIndex: 1000,
-                pointerEvents: 'none',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              <div>GPS: {tooltip.coverage}</div>
-              <div>Density: {(tooltip.density * 100).toFixed(1)}%</div>
-              <div>Insects: ~{tooltip.insects}</div>
-            </div>
-          )}
         </Box>
+        
+        {/* Tooltip */}
+        {tooltip.visible && isHeatmapGenerated && (
+          <div
+            style={{
+              position: 'fixed',
+              left: tooltip.x + 10,
+              top: tooltip.y - 10,
+              backgroundColor: 'rgba(0, 0, 0, 0.9)',
+              color: 'white',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontFamily: 'monospace',
+              zIndex: 1000,
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <div>GPS: {tooltip.coverage}</div>
+            <div>Density: {(tooltip.density * 100).toFixed(1)}%</div>
+            <div>Area: {tooltip.insectsPerSquareMeter.toFixed(1)} insects/m²</div>
+          </div>
+        )}
         
         {isHeatmapGenerated && (
           <Box mt="md">

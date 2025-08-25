@@ -1,0 +1,23 @@
+╭───────────────────────────────────────────────────────╮
+│ ✻ Welcome to Claude Code!                             │
+│                                                       │
+│   /help for help, /status for your current setup      │
+│                                                       │
+│   cwd: /home/nlslas/work/private/drone-log-to-report  │
+╰───────────────────────────────────────────────────────╯
+● Compact summary (ctrl+r to expand)
+  ⎿ Read drone-log-viewer/src/components/TrichogrammaCanvas/TrichrogrammaCanvas.tsx (387 
+    lines)
+  ⎿  Read drone-log-viewer/src/utils/heatmapUtils.ts (291 lines)
+  ⎿ Read drone-log-viewer/src/components/TrichogrammaCanvas/TrichogrammaCanvas.tsx (366 
+    lines)
+  ⎿  Read drone-log-viewer/src/utils/canvasUtils.ts (230 lines)
+  ⎿  Read drone-log-viewer/src/utils/thermalColors.ts (125 lines)
+  ⎿  Todo list read (11 items)
+  ⎿  5-hour limit reached ∙ resets 12pm
+     /upgrade to increase your usage limit.
+
+> /cost 
+  ⎿ With your Claude Pro subscription, no need to monitor cost — your subscription includes 
+    Claude Code usage
+
