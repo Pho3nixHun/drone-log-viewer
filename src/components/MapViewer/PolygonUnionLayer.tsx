@@ -1,12 +1,9 @@
-import React from 'react'
 import { Polygon, Popup } from 'react-leaflet'
-import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
 import { calculatePolygonUnion, calculatePolygonArea, squareDegreesToHectares } from '../../utils/polygonUtils'
 
 export function PolygonUnionLayer() {
   const { currentMission, selectedLayers, selectedSourceFiles } = useMissionStore()
-  const { t } = useTranslation()
   
   if (!currentMission?.missionSettings || !selectedLayers.has('polygonUnion')) return null
   

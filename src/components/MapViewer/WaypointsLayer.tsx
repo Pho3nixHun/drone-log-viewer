@@ -13,21 +13,15 @@ export function WaypointsLayer() {
   const { currentMission, timeRange, isReplaying, replayCurrentTime, selectedSourceFiles } = useMissionStore()
   const { t } = useTranslation()
   const map = useMap()
-  const decoratorRef = useRef<any>(null)
-  
-  if (!currentMission) return null
-  
-  const { waypoints } = currentMission.flightLog
+  const decoratorRef = useRef<L.Layer | null>(null)
   
   // Filter out invalid coordinates only once
-  const validPoints = waypoints.filter(
+  const validPoints = currentMission?.flightLog.waypoints.filter(
     point => point.latitude !== 0 && point.longitude !== 0
-  )
-  
-  if (validPoints.length === 0) return null
+  ) || []
   
   // Determine if each point should be visible
-  const isPointVisible = (point: any) => {
+  const isPointVisible = (point: { latitude: number; longitude: number; date: string; sourceFile?: string }) => {
     // Check if source file is selected (for merged missions)
     if (point.sourceFile && !selectedSourceFiles.has(point.sourceFile)) {
       return false
@@ -62,11 +56,13 @@ export function WaypointsLayer() {
       }
       
       // Create new decorator with arrows
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const decorator = (L as any).polylineDecorator(pathCoordinates, {
         patterns: [
           {
             offset: 25,
             repeat: 100,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             symbol: (L as any).Symbol.arrowHead({
               pixelSize: 12,
               pathOptions: {
@@ -90,6 +86,9 @@ export function WaypointsLayer() {
       }
     }
   }, [pathCoordinates, map])
+  
+  if (!currentMission) return null
+  if (validPoints.length === 0) return null
   
   return (
     <>
@@ -119,6 +118,7 @@ export function WaypointsLayer() {
               opacity: visible ? 1 : 0,
               fillOpacity: visible ? 0.9 : 0
             }}
+            radius={6}
           >
             <Popup>
               <div style={{ 

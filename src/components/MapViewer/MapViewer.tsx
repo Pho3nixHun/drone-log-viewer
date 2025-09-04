@@ -19,7 +19,6 @@ const DefaultIcon = (L as any).icon({
   shadowSize: [41, 41]
 })
 
-// @ts-expect-error - Setting default icon for all markers
 L.Marker.prototype.options.icon = DefaultIcon
 
 import { useMissionStore } from '../../stores/missionStore'
@@ -66,7 +65,6 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
       <LoadingOverlay visible={isLoading} />
       
       <MapContainer
-        // @ts-expect-error - React Leaflet v5 type issues
         center={center}
         zoom={zoom}
         maxZoom={25}
@@ -74,13 +72,11 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
       >
         {tileLayer === 'osm' ? (
           <TileLayer
-            // @ts-expect-error - React Leaflet v5 type issues
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
         ) : (
           <TileLayer
-            // @ts-expect-error - React Leaflet v5 type issues
             attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           />

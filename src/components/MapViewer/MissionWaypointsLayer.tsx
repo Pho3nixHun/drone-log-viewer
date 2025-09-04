@@ -1,11 +1,9 @@
 import React from 'react'
 import { Polyline, CircleMarker, Popup } from 'react-leaflet'
-import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
 
 export function MissionWaypointsLayer() {
   const { currentMission, selectedSourceFiles } = useMissionStore()
-  const { t } = useTranslation()
   
   if (!currentMission?.missionSettings) return null
   
@@ -79,7 +77,7 @@ export function MissionWaypointsLayer() {
                 opacity: 1,
                 fillOpacity: 0.8
               }}
-              radius={4}
+              radius={6}
             >
               <Popup>
                 <div style={{ minWidth: 150 }}>

@@ -251,7 +251,7 @@ export async function parseMultipleJSONFiles(files: File[]): Promise<MergedMissi
   return mergedMission
 }
 
-function validateMissionLog(data: any): void {
+function validateMissionLog(data: unknown): void {
   if (!data || typeof data !== 'object') {
     throw new FileParseError('Invalid file structure')
   }
@@ -265,7 +265,7 @@ function validateMissionLog(data: any): void {
   }
 
   // Validate flightLog structure
-  const flightLog = data.flightLog
+  const flightLog = 'flightLog' in data && data.flightLog
   if (!flightLog || typeof flightLog !== 'object') {
     throw new FileParseError('Invalid flightLog structure')
   }
@@ -277,42 +277,76 @@ function validateMissionLog(data: any): void {
     }
   }
 
-  // Validate arrays
-  if (!Array.isArray(flightLog.dropPoints)) {
-    throw new FileParseError('dropPoints must be an array')
+  // Create type assertion function for flight log arrays
+  function assertFlightLogArrays(log: Record<string, unknown>): asserts log is Record<string, unknown> & {
+    dropPoints: unknown[]
+    waypoints: unknown[]
+  } {
+    if (!('dropPoints' in log) || !Array.isArray(log.dropPoints)) {
+      throw new FileParseError('dropPoints must be an array')
+    }
+    if (!('waypoints' in log) || !Array.isArray(log.waypoints)) {
+      throw new FileParseError('waypoints must be an array')
+    }
   }
-  
-  if (!Array.isArray(flightLog.waypoints)) {
-    throw new FileParseError('waypoints must be an array')
-  }
+
+  const typedFlightLog = flightLog as Record<string, unknown>
+  assertFlightLogArrays(typedFlightLog)
 
   // Validate point structures
-  validatePoints(flightLog.dropPoints, 'dropPoints')
-  validatePoints(flightLog.waypoints, 'waypoints')
+  validatePoints(typedFlightLog.dropPoints, 'dropPoints')
+  validatePoints(typedFlightLog.waypoints, 'waypoints')
 }
 
-function validatePoints(points: any[], type: string): void {
-  const requiredFields = ['latitude', 'longitude', 'altitude', 'date']
+// Type assertion function for point objects
+function assertPointObject(point: unknown, type: string, index: number): asserts point is Record<string, unknown> {
+  if (!point || typeof point !== 'object') {
+    throw new FileParseError(`Invalid ${type} structure at index ${index}`)
+  }
+}
+
+// Type assertion function for accessing object properties
+function assertHasProperty<T extends Record<string, unknown>, K extends string>(
+  obj: T,
+  property: K,
+  type: string,
+  index: number
+): asserts obj is T & Record<K, unknown> {
+  if (!(property in obj)) {
+    throw new FileParseError(`Missing ${property} in ${type} at index ${index}`)
+  }
+}
+
+// Type assertion for number properties with range validation
+function assertValidCoordinate(
+  value: unknown,
+  property: 'latitude' | 'longitude',
+  type: string,
+  index: number
+): asserts value is number {
+  if (typeof value !== 'number') {
+    throw new FileParseError(`Invalid ${property} type in ${type} at index ${index}`)
+  }
+  
+  const range = property === 'latitude' ? [-90, 90] : [-180, 180]
+  if (value < range[0] || value > range[1]) {
+    throw new FileParseError(`Invalid ${property} range in ${type} at index ${index}`)
+  }
+}
+
+function validatePoints(points: unknown[], type: string): void {
+  const requiredFields = ['latitude', 'longitude', 'altitude', 'date'] as const
   
   points.forEach((point, index) => {
-    if (!point || typeof point !== 'object') {
-      throw new FileParseError(`Invalid ${type} structure at index ${index}`)
-    }
+    assertPointObject(point, type, index)
     
     for (const field of requiredFields) {
-      if (!(field in point)) {
-        throw new FileParseError(`Missing ${field} in ${type} at index ${index}`)
-      }
+      assertHasProperty(point, field, type, index)
     }
     
-    // Validate coordinate ranges
-    if (typeof point.latitude !== 'number' || point.latitude < -90 || point.latitude > 90) {
-      throw new FileParseError(`Invalid latitude in ${type} at index ${index}`)
-    }
-    
-    if (typeof point.longitude !== 'number' || point.longitude < -180 || point.longitude > 180) {
-      throw new FileParseError(`Invalid longitude in ${type} at index ${index}`)
-    }
+    // Validate coordinate ranges with proper type assertions
+    assertValidCoordinate(point.latitude, 'latitude', type, index)
+    assertValidCoordinate(point.longitude, 'longitude', type, index)
   })
 }
 
@@ -340,7 +374,8 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
       averageSpeed: 0,
       coveredAreaHectares: 0,
       averageDropDistance: 0,
-      averageDropLineDistance: 0
+      averageDropLineDistance: 0,
+      maxDropPerMinute: 0
     }
   }
   
@@ -380,17 +415,24 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
   }
 }
 
-function calculateTotalDistance(waypoints: any[]): number {
+function calculateTotalDistance(waypoints: unknown[]): number {
   if (waypoints.length < 2) return 0
   
   let totalDistance = 0
   for (let i = 1; i < waypoints.length; i++) {
     const prev = waypoints[i - 1]
     const curr = waypoints[i]
-    totalDistance += calculateDistance(
-      prev.latitude, prev.longitude,
-      curr.latitude, curr.longitude
-    )
+    
+    // Type guards
+    if (prev && typeof prev === 'object' && 'latitude' in prev && 'longitude' in prev &&
+        curr && typeof curr === 'object' && 'latitude' in curr && 'longitude' in curr &&
+        typeof prev.latitude === 'number' && typeof prev.longitude === 'number' &&
+        typeof curr.latitude === 'number' && typeof curr.longitude === 'number') {
+      totalDistance += calculateDistance(
+        prev.latitude, prev.longitude,
+        curr.latitude, curr.longitude
+      )
+    }
   }
   return Math.round(totalDistance)
 }
@@ -411,11 +453,20 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c
 }
 
-function calculateCoveredAreaHectares(dropPoints: any[]): number {
+function calculateCoveredAreaHectares(dropPoints: unknown[]): number {
   if (dropPoints.length < 3) return 0
   
-  // Filter out invalid coordinates
-  const validPoints = dropPoints.filter(p => p.latitude !== 0 && p.longitude !== 0)
+  // Filter out invalid coordinates with proper type guard
+  const validPoints = dropPoints.filter((p): p is { latitude: number; longitude: number } => {
+    return p !== null && 
+           typeof p === 'object' && 
+           'latitude' in p && 
+           'longitude' in p &&
+           typeof p.latitude === 'number' && 
+           typeof p.longitude === 'number' &&
+           p.latitude !== 0 && 
+           p.longitude !== 0
+  })
   if (validPoints.length < 3) return 0
   
   // Find the bounding box of drop points
@@ -442,13 +493,24 @@ function calculateCoveredAreaHectares(dropPoints: any[]): number {
   return areaHectares
 }
 
-function calculateDropDistances(dropPoints: any[]): { averageDropDistance: number, averageDropLineDistance: number } {
+function calculateDropDistances(dropPoints: unknown[]): { averageDropDistance: number, averageDropLineDistance: number } {
   if (dropPoints.length < 2) {
     return { averageDropDistance: 0, averageDropLineDistance: 0 }
   }
   
   // Filter out invalid coordinates
-  const validPoints = dropPoints.filter(p => p.latitude !== 0 && p.longitude !== 0)
+  const validPoints = dropPoints.filter((p): p is { latitude: number; longitude: number; date: string } => {
+    return p !== null && 
+           typeof p === 'object' && 
+           'latitude' in p && 
+           'longitude' in p && 
+           'date' in p &&
+           typeof p.latitude === 'number' && 
+           typeof p.longitude === 'number' && 
+           typeof p.date === 'string' &&
+           p.latitude !== 0 && 
+           p.longitude !== 0
+  })
   if (validPoints.length < 2) {
     return { averageDropDistance: 0, averageDropLineDistance: 0 }
   }
@@ -472,11 +534,11 @@ function calculateDropDistances(dropPoints: any[]): { averageDropDistance: numbe
   
   // Group points into lines based on proximity and time gaps
   // A drop-line is a sequence of consecutive drops along the same flight path
-  const dropLines: any[][] = []
+  const dropLines: { latitude: number; longitude: number; date: string }[][] = []
   const maxTimeGapMinutes = 2 // If gap > 2 minutes, start new drop-line
   const maxDistanceMeters = 50 // If distance > 50m, start new drop-line
   
-  let currentLine: any[] = [sortedPoints[0]]
+  let currentLine: { latitude: number; longitude: number; date: string }[] = [sortedPoints[0]]
   
   for (let i = 1; i < sortedPoints.length; i++) {
     const prevPoint = sortedPoints[i - 1]
@@ -529,12 +591,24 @@ function calculateDropDistances(dropPoints: any[]): { averageDropDistance: numbe
   }
 }
 
-function calculateMaxDropPerMinute(dropPoints: any[]): number {
+function calculateMaxDropPerMinute(dropPoints: unknown[]): number {
   if (dropPoints.length < 2) return 0
   
   // Filter out invalid coordinates and sort by timestamp
   const validPoints = dropPoints
-    .filter(p => p.latitude !== 0 && p.longitude !== 0 && p.date)
+    .filter((p): p is { latitude: number; longitude: number; date: string } => {
+      return p !== null && 
+             typeof p === 'object' && 
+             'latitude' in p && 
+             'longitude' in p && 
+             'date' in p &&
+             typeof p.latitude === 'number' && 
+             typeof p.longitude === 'number' && 
+             typeof p.date === 'string' &&
+             p.latitude !== 0 && 
+             p.longitude !== 0 && 
+             Boolean(p.date)
+    })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   
   if (validPoints.length < 2) return 0

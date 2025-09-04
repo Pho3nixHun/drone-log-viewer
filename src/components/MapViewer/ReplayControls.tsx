@@ -55,11 +55,6 @@ export function ReplayControls({ embedded = false }: ReplayControlsProps) {
     }
   }, [isReplaying, replaySpeed, replayStartTime, replayEndTime, replayCurrentTime, currentMission, setReplayCurrentTime, pauseReplay])
   
-  if (!currentMission || !replayStartTime || !replayEndTime) return null
-  
-  const currentTimeValue = replayCurrentTime || replayStartTime
-  const isComplete = replayCurrentTime === replayEndTime
-  
   // Calculate visible points based on current replay time
   const visibleCounts = useMemo(() => {
     if (!currentMission || !replayCurrentTime) return { dropPoints: 0, waypoints: 0 }
@@ -78,6 +73,11 @@ export function ReplayControls({ embedded = false }: ReplayControlsProps) {
     
     return { dropPoints: visibleDropPoints, waypoints: visibleWaypoints }
   }, [currentMission, replayCurrentTime])
+  
+  if (!currentMission || !replayStartTime || !replayEndTime) return null
+  
+  const currentTimeValue = replayCurrentTime || replayStartTime
+  const isComplete = replayCurrentTime === replayEndTime
   
   const handlePlayPause = () => {
     if (isComplete) {

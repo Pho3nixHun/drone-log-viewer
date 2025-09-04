@@ -21,7 +21,7 @@ export function DropPointsLayer() {
   if (validPoints.length === 0) return null
   
   // Determine if each point should be visible
-  const isPointVisible = (point: any) => {
+  const isPointVisible = (point: { latitude: number; longitude: number; date: string; sourceFile?: string }) => {
     // Check if source file is selected (for merged missions)
     if (point.sourceFile && !selectedSourceFiles.has(point.sourceFile)) {
       return false
@@ -60,6 +60,7 @@ export function DropPointsLayer() {
               opacity: visible ? 1 : 0,
               fillOpacity: visible ? 0.8 : 0
             }}
+            radius={6}
           >
             <Popup>
               <div style={{ 

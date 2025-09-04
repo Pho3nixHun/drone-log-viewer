@@ -9,7 +9,7 @@ interface TimeChartProps {
   height: number
 }
 
-export function TimeChart({ width, height }: TimeChartProps) {
+export function TimeChart({ height }: TimeChartProps) {
   const { currentMission } = useMissionStore()
   const { t } = useTranslation()
   const [resolution, setResolution] = useState('60') // Default to 60 seconds (1 minute)
@@ -65,7 +65,6 @@ export function TimeChart({ width, height }: TimeChartProps) {
     })
     
     // Convert to combined chart data format with rates per resolution
-    const resolutionSeconds = parseInt(resolution)
     return dropBuckets.map((dropCount, index) => ({
       index,
       time: new Date(minTime + (index * bucketDuration)).toLocaleTimeString(),
@@ -76,7 +75,20 @@ export function TimeChart({ width, height }: TimeChartProps) {
   
   if (chartData.length === 0) return null
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  interface TooltipProps {
+    active?: boolean
+    payload?: Array<{
+      value: number
+      name: string
+      color: string
+      payload: {
+        time: string
+      }
+    }>
+    label?: string
+  }
+  
+  const CustomTooltip = ({ active, payload }: TooltipProps) => {
     if (active && payload && payload.length) {
       return (
         <Box 
@@ -89,7 +101,7 @@ export function TimeChart({ width, height }: TimeChartProps) {
           }}
         >
           <Text size="xs" c="dimmed" mb={2}>{payload[0]?.payload?.time}</Text>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index) => (
             <Text key={index} size="xs" style={{ color: entry.color }}>
               {entry.name}: {entry.value}/{parseInt(resolution)}s
             </Text>

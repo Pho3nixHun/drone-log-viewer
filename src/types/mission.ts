@@ -16,7 +16,7 @@ export interface MissionSettings {
     routeLength: number
     dropCountEst: number
     durationMillisEst: number
-    additionalOptions: any[]
+    additionalOptions: unknown[]
   }
   polygon: [number, number][]
   missionWaypoints: [number, number][]

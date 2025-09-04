@@ -1,4 +1,4 @@
-import { Stack, Tabs, rem, Box } from '@mantine/core'
+import { Stack, Tabs, rem } from '@mantine/core'
 import { IconStack2, IconClock, IconPlayerPlay } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'

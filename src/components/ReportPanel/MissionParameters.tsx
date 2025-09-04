@@ -2,6 +2,7 @@ import { Card, Text, Group, Stack, Badge, Divider, Grid } from '@mantine/core'
 import { IconSettings, IconRuler, IconMountain, IconGauge } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
+import type { MissionSettings } from '../../types/mission'
 
 export function MissionParameters() {
   const { currentMission } = useMissionStore()
@@ -13,7 +14,7 @@ export function MissionParameters() {
   const leftColumnSettings = currentMission.missionSettings.filter((_, index) => index % 2 === 0)
   const rightColumnSettings = currentMission.missionSettings.filter((_, index) => index % 2 === 1)
   
-  const renderMissionCard = (settings: any, originalIndex: number) => (
+  const renderMissionCard = (settings: MissionSettings, originalIndex: number) => (
     <Stack key={settings.filename || `wdm-${originalIndex}`} gap="sm" p="sm" style={{ 
       backgroundColor: 'var(--mantine-color-green-0)', 
       borderRadius: 'var(--mantine-radius-sm)',

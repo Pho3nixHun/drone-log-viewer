@@ -2,7 +2,7 @@ import { Card, Text, Group, Stack, Badge, Divider } from '@mantine/core'
 import { IconDrone, IconUser, IconCalendar, IconClock, IconMapPin } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
-import { formatDuration, formatDate, formatDateShort } from '../../utils/dateHelpers'
+import { formatDate, formatDateShort } from '../../utils/dateHelpers'
 
 export function MissionSummary() {
   const { currentMission, missionStats } = useMissionStore()

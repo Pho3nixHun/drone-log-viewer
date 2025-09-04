@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Card, Text, Box, Button, Group, NumberInput, Grid, Paper, LoadingOverlay, Progress, Switch, Tooltip } from '@mantine/core'
 import { IconChartDots, IconSettings } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
@@ -100,15 +100,7 @@ export function TrichogrammaCanvas() {
     console.groupEnd()
   }, [])
 
-  // Initialize canvas with basic setup
-  useEffect(() => {
-    if (!currentMission?.flightLog.dropPoints || !canvasRef.current) return
-    
-    // Just set up canvas dimensions without generating heatmap
-    setupCanvas()
-  }, [currentMission])
-
-  const setupCanvas = () => {
+  const setupCanvas = useCallback(() => {
     if (!currentMission?.flightLog.dropPoints || !canvasRef.current) return
     
     const canvas = canvasRef.current
@@ -144,7 +136,15 @@ export function TrichogrammaCanvas() {
     )
     
     setIsHeatmapGenerated(false)
-  }
+  }, [currentMission, parameters, t])
+
+  // Initialize canvas with basic setup
+  useEffect(() => {
+    if (!currentMission?.flightLog.dropPoints || !canvasRef.current) return
+    
+    // Just set up canvas dimensions without generating heatmap
+    setupCanvas()
+  }, [currentMission, setupCanvas])
 
   const generateHeatmap = async () => {
     console.log('🔥 Generate heatmap button clicked!')

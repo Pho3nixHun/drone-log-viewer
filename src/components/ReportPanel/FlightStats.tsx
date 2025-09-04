@@ -1,5 +1,5 @@
 import { Card, Text, Group, Stack, SimpleGrid, ThemeIcon } from '@mantine/core'
-import { IconDroplet, IconRoute, IconGauge, IconRuler, IconClock, IconBug, IconMapPin, IconMap2 } from '@tabler/icons-react'
+import { IconRoute, IconGauge, IconRuler, IconClock, IconBug, IconMapPin, IconMap2 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
 import { formatDistance } from '../../utils/mapHelpers'
@@ -11,8 +11,6 @@ export function FlightStats() {
   const { t } = useTranslation()
   
   if (!currentMission || !missionStats) return null
-
-  const { flightLog } = currentMission
   
   // Calculate total field area from WDM files (handling overlaps)
   const totalFieldArea = currentMission.missionSettings 
