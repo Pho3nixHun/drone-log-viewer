@@ -6,10 +6,18 @@
   "upload": {
     "title": "Drón Napló Fájlok Feltöltése",
     "description": "Támogatott: JSON fájlok maximum 10MB egyenként. Válasszon több fájlt az összevonáshoz.",
+    "descriptionExtended": "Támogatja a .wdm küldetés fájlokat is.",
     "button": "Fájlok Kiválasztása",
     "dragDrop": "Húzza ide a JSON napló fájlokat vagy kattintson a tallózáshoz",
     "processing": "Drón napló fájlok feldolgozása...",
-    "error": "Hiba a fájlok betöltésekor"
+    "error": "Hiba a fájlok betöltésekor",
+    "clear": "Törlés",
+    "addMore": "Továbbiak Hozzáadása",
+    "missionSettings": "Küldetés Beállítások (Opcionális):",
+    "browsewdm": "Tallózás .wdm",
+    "addMorewdm": "További .wdm Hozzáadása",
+    "missionFilesDescription": "Töltsön fel .wdm küldetés fájlokat a részletes küldetés paraméterekhez",
+    "loadMissionData": "Adatok Betöltése"
   },
   "map": {
     "layers": "Rétegek",

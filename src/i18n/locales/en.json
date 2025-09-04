@@ -6,10 +6,18 @@
   "upload": {
     "title": "Upload Drone Log Files",
     "description": "Supported: JSON files up to 10MB each. Select multiple files to merge them.",
+    "descriptionExtended": "Also supports .wdm mission files.",
     "button": "Select Files",
     "dragDrop": "Drag and drop your JSON log files here or click to browse",
     "processing": "Processing drone log files...",
-    "error": "Error loading files"
+    "error": "Error loading files",
+    "clear": "Clear",
+    "addMore": "Add More",
+    "missionSettings": "Mission Settings (Optional):",
+    "browsewdm": "Browse .wdm",
+    "addMorewdm": "Add More .wdm",
+    "missionFilesDescription": "Upload .wdm mission files for detailed mission parameters",
+    "loadMissionData": "Load Mission Data"
   },
   "map": {
     "layers": "Layers",

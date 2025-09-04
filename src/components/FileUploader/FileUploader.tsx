@@ -187,7 +187,7 @@ export function FileUploader() {
                 leftSection={<IconX size={14} />}
                 onClick={handleClearSelection}
               >
-                Clear
+{t('upload.clear')}
               </Button>
             </Group>
 
@@ -208,7 +208,7 @@ export function FileUploader() {
                       variant="light"
                       leftSection={<IconFile size={14} />}
                     >
-                      Add More
+{t('upload.addMore')}
                     </Button>
                   )}
                 </FileButton>
@@ -240,7 +240,7 @@ export function FileUploader() {
             {/* Mission File Section */}
             <Stack gap="xs">
               <Group justify="space-between" align="center">
-                <Text size="sm" fw={500}>Mission Settings (Optional):</Text>
+                <Text size="sm" fw={500}>{t('upload.missionSettings')}</Text>
                 <FileButton
                   resetRef={missionResetRef}
                   onChange={handleMissionFileSelect}
@@ -254,7 +254,7 @@ export function FileUploader() {
                       variant="light"
                       leftSection={<IconSettings size={14} />}
                     >
-                      {selectedMissionFiles.length === 0 ? 'Browse .wdm' : 'Add More .wdm'}
+{selectedMissionFiles.length === 0 ? t('upload.browsewdm') : t('upload.addMorewdm')}
                     </Button>
                   )}
                 </FileButton>
@@ -285,7 +285,7 @@ export function FileUploader() {
                 </Stack>
               ) : (
                 <Text size="xs" c="dimmed">
-                  Upload .wdm mission files for detailed mission parameters
+{t('upload.missionFilesDescription')}
                 </Text>
               )}
             </Stack>
@@ -300,7 +300,7 @@ export function FileUploader() {
                 size="md"
                 variant="filled"
               >
-                Load Mission Data
+                {t('upload.loadMissionData')}
               </Button>
             </Group>
           </Stack>
@@ -353,7 +353,7 @@ export function FileUploader() {
             </Group>
             
             <Text size="xs" c="dimmed">
-              {t('upload.description')} Also supports .wdm mission files.
+{t('upload.description')} {t('upload.descriptionExtended')}
             </Text>
           </Stack>
         </Paper>
