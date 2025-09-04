@@ -10,6 +10,7 @@ export function FileUploader() {
   const [selectedMissionFiles, setSelectedMissionFiles] = useState<File[]>([])
   const resetRef = useRef<() => void>(null)
   const missionResetRef = useRef<() => void>(null)
+  const addMoreLogRef = useRef<() => void>(null)
   const { t } = useTranslation()
   
   const { loadMission, loadMissionSettings, isLoading, error, clearError } = useMissionStore()
@@ -29,10 +30,47 @@ export function FileUploader() {
     }
   }
 
+  const handleAddMoreLogFiles = (files: File | File[] | null) => {
+    const fileArray = files ? (Array.isArray(files) ? files : [files]) : []
+    
+    // Only process JSON files for log files
+    const jsonFiles = fileArray.filter(file => file.name.endsWith('.json'))
+    
+    // Filter out duplicates by name
+    const newFiles = jsonFiles.filter(newFile => 
+      !selectedLogFiles.some(existingFile => existingFile.name === newFile.name)
+    )
+    
+    if (newFiles.length > 0) {
+      setSelectedLogFiles(prev => [...prev, ...newFiles])
+    }
+  }
+
   const handleMissionFileSelect = (files: File | File[] | null) => {
     const fileArray = files ? (Array.isArray(files) ? files : [files]) : []
     const wdmFiles = fileArray.filter(file => file.name.endsWith('.wdm'))
-    setSelectedMissionFiles(wdmFiles)
+    
+    if (selectedMissionFiles.length === 0) {
+      // If no files selected yet, replace
+      setSelectedMissionFiles(wdmFiles)
+    } else {
+      // If files already selected, append (avoiding duplicates)
+      const newFiles = wdmFiles.filter(newFile => 
+        !selectedMissionFiles.some(existingFile => existingFile.name === newFile.name)
+      )
+      if (newFiles.length > 0) {
+        setSelectedMissionFiles(prev => [...prev, ...newFiles])
+      }
+    }
+  }
+
+
+  const handleRemoveLogFile = (indexToRemove: number) => {
+    setSelectedLogFiles(prev => prev.filter((_, index) => index !== indexToRemove))
+  }
+
+  const handleRemoveMissionFile = (indexToRemove: number) => {
+    setSelectedMissionFiles(prev => prev.filter((_, index) => index !== indexToRemove))
   }
 
   const handleLoadFiles = async () => {
@@ -53,6 +91,7 @@ export function FileUploader() {
     setSelectedMissionFiles([])
     resetRef.current?.()
     missionResetRef.current?.()
+    addMoreLogRef.current?.()
   }
 
   const handleClearSelection = () => {
@@ -60,6 +99,7 @@ export function FileUploader() {
     setSelectedMissionFiles([])
     resetRef.current?.()
     missionResetRef.current?.()
+    addMoreLogRef.current?.()
     clearError()
   }
 
@@ -82,10 +122,31 @@ export function FileUploader() {
     const wdmFiles = files.filter(file => file.name.endsWith('.wdm'))
     
     if (jsonFiles.length > 0) {
-      setSelectedLogFiles(jsonFiles)
+      if (selectedLogFiles.length === 0) {
+        setSelectedLogFiles(jsonFiles)
+      } else {
+        // Append new files, avoiding duplicates
+        const newFiles = jsonFiles.filter(newFile => 
+          !selectedLogFiles.some(existingFile => existingFile.name === newFile.name)
+        )
+        if (newFiles.length > 0) {
+          setSelectedLogFiles(prev => [...prev, ...newFiles])
+        }
+      }
     }
+    
     if (wdmFiles.length > 0) {
-      setSelectedMissionFiles(wdmFiles)
+      if (selectedMissionFiles.length === 0) {
+        setSelectedMissionFiles(wdmFiles)
+      } else {
+        // Append new files, avoiding duplicates
+        const newFiles = wdmFiles.filter(newFile => 
+          !selectedMissionFiles.some(existingFile => existingFile.name === newFile.name)
+        )
+        if (newFiles.length > 0) {
+          setSelectedMissionFiles(prev => [...prev, ...newFiles])
+        }
+      }
     }
   }
 
@@ -132,7 +193,26 @@ export function FileUploader() {
 
             {/* Selected Log Files */}
             <Stack gap="xs">
-              <Text size="sm" fw={500}>Drone Log Files:</Text>
+              <Group justify="space-between" align="center">
+                <Text size="sm" fw={500}>Drone Log Files:</Text>
+                <FileButton
+                  resetRef={addMoreLogRef}
+                  onChange={handleAddMoreLogFiles}
+                  accept=".json"
+                  multiple
+                >
+                  {(props) => (
+                    <Button
+                      {...props}
+                      size="xs"
+                      variant="light"
+                      leftSection={<IconFile size={14} />}
+                    >
+                      Add More
+                    </Button>
+                  )}
+                </FileButton>
+              </Group>
               {selectedLogFiles.map((file, index) => (
                 <Group key={index} gap="xs">
                   <IconFile size={16} color="var(--mantine-color-blue-5)" />
@@ -142,6 +222,15 @@ export function FileUploader() {
                   <Badge size="sm" variant="light" color="blue">
                     {(file.size / 1024).toFixed(1)}KB
                   </Badge>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={() => handleRemoveLogFile(index)}
+                    p={4}
+                  >
+                    <IconX size={12} />
+                  </Button>
                 </Group>
               ))}
             </Stack>
@@ -165,13 +254,13 @@ export function FileUploader() {
                       variant="light"
                       leftSection={<IconSettings size={14} />}
                     >
-                      Browse .wdm
+                      {selectedMissionFiles.length === 0 ? 'Browse .wdm' : 'Add More .wdm'}
                     </Button>
                   )}
                 </FileButton>
               </Group>
 
-{selectedMissionFiles.length > 0 ? (
+              {selectedMissionFiles.length > 0 ? (
                 <Stack gap="xs">
                   {selectedMissionFiles.map((file, index) => (
                     <Group key={index} gap="xs">
@@ -182,6 +271,15 @@ export function FileUploader() {
                       <Badge size="sm" variant="light" color="green">
                         {(file.size / 1024).toFixed(1)}KB
                       </Badge>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => handleRemoveMissionFile(index)}
+                        p={4}
+                      >
+                        <IconX size={12} />
+                      </Button>
                     </Group>
                   ))}
                 </Stack>
