@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Card, Text, Box, Button, Group, NumberInput, Grid, Paper, LoadingOverlay, Progress, Switch, Tooltip } from '@mantine/core'
 import { IconChartDots, IconSettings } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
 import { applyThermalColors } from '../../utils/thermalColors'
 import { 
@@ -23,6 +24,7 @@ import { isWebGPUSupported } from '../../utils/webgpuUtils'
 
 export function TrichogrammaCanvas() {
   const { currentMission } = useMissionStore()
+  const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const densityMapRef = useRef<DensityMapData | null>(null)
   const [tooltip, setTooltip] = useState<{
@@ -136,7 +138,7 @@ export function TrichogrammaCanvas() {
     clearCanvas(ctx, dimensions.displayWidth, dimensions.displayHeight)
     drawPlaceholderText(
       ctx,
-      'Click "Generate Heatmap" to create visualization',
+      t('heatmap.description'),
       dimensions.displayWidth,
       dimensions.displayHeight
     )
@@ -307,9 +309,9 @@ export function TrichogrammaCanvas() {
   return (
     <Card withBorder p="lg" style={{ backgroundColor: '#fafbfc' }}>
       <Box>
-        <Text size="lg" fw={600} mb="md">Trichogramma Density Distribution</Text>
+        <Text size="lg" fw={600} mb="md">{t('heatmap.title')}</Text>
         <Text size="sm" c="dimmed" mb="md">
-          Gaussian distribution showing insect spread - Configure parameters and generate visualization
+          {t('heatmap.descriptionLong')}
         </Text>
         
         {/* Parameters Form */}
@@ -318,19 +320,19 @@ export function TrichogrammaCanvas() {
           
           <Group align="center" mb="sm">
             <IconSettings size={16} />
-            <Text size="sm" fw={600}>Heatmap Parameters</Text>
+            <Text size="sm" fw={600}>{t('heatmap.parameters')}</Text>
           </Group>
           
           <Grid>
             <Grid.Col span={6}>
               <Tooltip
-                label="Controls how tightly insects are distributed around each drop point. Lower values = more concentrated, higher values = more spread out distribution."
+                label={t('heatmap.sigmaTooltip')}
                 multiline
                 withArrow
               >
                 <NumberInput
-                  label="Sigma (σ)"
-                  description="Standard deviation in meters"
+                  label={t('heatmap.sigma')}
+                  description={t('heatmap.sigmaDescription')}
                   value={parameters.sigma}
                   onChange={(value) => setParameters(prev => ({ ...prev, sigma: Number(value) || 5 }))}
                   disabled={isGenerating}
@@ -343,13 +345,13 @@ export function TrichogrammaCanvas() {
             </Grid.Col>
             <Grid.Col span={6}>
               <Tooltip
-                label="Maximum distance insects can travel from drop points. Beyond this distance, insect density becomes negligible. Affects computation performance."
+                label={t('heatmap.maxDistanceTooltip')}
                 multiline
                 withArrow
               >
                 <NumberInput
-                  label="Max Distance"
-                  description="Maximum spread in meters"
+                  label={t('heatmap.maxDistance')}
+                  description={t('heatmap.maxDistanceDescription')}
                   value={parameters.maxDistance}
                   onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
                   disabled={isGenerating}
@@ -362,13 +364,13 @@ export function TrichogrammaCanvas() {
             </Grid.Col>
             <Grid.Col span={6}>
               <Tooltip
-                label="Number of trichogramma insects released at each drop point. Higher values increase overall density calculations and tooltip insect counts."
+                label={t('heatmap.insectsPerDropTooltip')}
                 multiline
                 withArrow
               >
                 <NumberInput
-                  label="Insects/Drop"
-                  description="Insects per drop point"
+                  label={t('heatmap.insectsPerDrop')}
+                  description={t('heatmap.insectsPerDropDescription')}
                   value={parameters.insectsPerDrop}
                   onChange={(value) => setParameters(prev => ({ ...prev, insectsPerDrop: Number(value) || 1200 }))}
                   disabled={isGenerating}
@@ -381,13 +383,13 @@ export function TrichogrammaCanvas() {
             </Grid.Col>
             <Grid.Col span={6}>
               <Tooltip
-                label="Increases canvas rendering resolution for sharper heatmaps. Higher values provide better quality but require more computation time and memory."
+                label={t('heatmap.resolutionTooltip')}
                 multiline
                 withArrow
               >
                 <NumberInput
-                  label="Resolution"
-                  description="Canvas resolution multiplier"
+                  label={t('heatmap.resolution')}
+                  description={t('heatmap.resolutionDescription')}
                   value={parameters.resolution}
                   onChange={(value) => setParameters(prev => ({ ...prev, resolution: Number(value) || 2 }))}
                   disabled={isGenerating}
@@ -400,13 +402,13 @@ export function TrichogrammaCanvas() {
             </Grid.Col>
             <Grid.Col span={12}>
               <Switch
-                label="GPU Acceleration"
+                label={t('heatmap.gpuAcceleration')}
                 description={
                   webgpuSupported === undefined
-                    ? "Checking WebGPU support..." 
+                    ? t('heatmap.gpuChecking') 
                     : webgpuSupported 
-                      ? "Use WebGPU for faster computation" 
-                      : "WebGPU not supported in this browser"
+                      ? t('heatmap.gpuSupported')
+                      : t('heatmap.gpuNotSupported')
                 }
                 checked={useGPU && Boolean(webgpuSupported)}
                 onChange={(event) => setUseGPU(event.currentTarget.checked)}
@@ -420,8 +422,8 @@ export function TrichogrammaCanvas() {
           {webgpuSupported !== undefined && (
             <Box mt="xs">
               <Text size="xs" c={webgpuSupported ? "teal" : "orange"}>
-                WebGPU: {webgpuSupported ? "✓ Supported" : "✗ Not available"}
-                {webgpuSupported && useGPU && " - GPU acceleration enabled"}
+                WebGPU: {webgpuSupported ? `✓ ${t('heatmap.gpuEnabled')}` : `✗ ${t('heatmap.gpuNotAvailable')}`}
+                {webgpuSupported && useGPU && ` - ${t('heatmap.gpuEnabled')}`}
               </Text>
             </Box>
           )}
@@ -430,7 +432,7 @@ export function TrichogrammaCanvas() {
           {isGenerating && (
             <Box mt="md">
               <Text size="xs" c="dimmed" mb={5}>
-                Generating heatmap... {generationProgress}%
+                {t('heatmap.generate')}... {generationProgress}%
               </Text>
               <Progress value={generationProgress} size="sm" />
             </Box>
@@ -438,7 +440,7 @@ export function TrichogrammaCanvas() {
           
           <Group justify="space-between" mt="md">
             <Text size="xs" c="dimmed">
-              σ={parameters.sigma}m, max {parameters.maxDistance}m radius, {parameters.insectsPerDrop} insects/drop
+              σ={parameters.sigma}m, max {parameters.maxDistance}m {t('heatmap.radius')}, {parameters.insectsPerDrop} {t('heatmap.insectsDropShort')}
             </Text>
             <Button
               leftSection={<IconChartDots size={16} />}
@@ -454,7 +456,7 @@ export function TrichogrammaCanvas() {
               disabled={!currentMission?.flightLog.dropPoints || isGenerating}
               size="sm"
             >
-              {isHeatmapGenerated ? 'Regenerate Heatmap' : 'Generate Heatmap'}
+              {isHeatmapGenerated ? t('heatmap.regenerate') : t('heatmap.generate')}
             </Button>
           </Group>
         </Paper>
@@ -502,15 +504,15 @@ export function TrichogrammaCanvas() {
               whiteSpace: 'nowrap'
             }}
           >
-            <div>GPS: {tooltip.coverage}</div>
-            <div>Density: {(tooltip.density * 100).toFixed(1)}%</div>
-            <div>Area: {tooltip.insectsPerSquareMeter.toFixed(1)} insects/m²</div>
+            <div>{t('heatmap.tooltipGPS')}: {tooltip.coverage}</div>
+            <div>{t('heatmap.tooltipDensity')}: {(tooltip.density * 100).toFixed(1)}%</div>
+            <div>{t('heatmap.tooltipArea')}: {tooltip.insectsPerSquareMeter.toFixed(1)} {t('heatmap.tooltipInsectsPerM2')}</div>
           </div>
         )}
         
         {isHeatmapGenerated && (
           <Box mt="md">
-            <Text size="xs" fw={600} mb="xs">Legend</Text>
+            <Text size="xs" fw={600} mb="xs">{t('heatmap.legend')}</Text>
             <Box style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
                 width: 12, 
@@ -518,7 +520,7 @@ export function TrichogrammaCanvas() {
                 borderRadius: '50%', 
                 background: 'radial-gradient(circle, rgba(255,0,0,0.8) 0%, rgba(255,165,0,0.6) 30%, rgba(255,255,0,0.4) 60%, rgba(0,255,0,0.2) 80%, rgba(0,255,255,0.1) 90%, rgba(0,0,255,0.05) 100%)'
               }} />
-              <Text size="xs" c="dimmed">Trichogramma density (thermal: red=high, blue=low)</Text>
+              <Text size="xs" c="dimmed">{t('heatmap.legendDescription')}</Text>
             </Box>
           </Box>
         )}

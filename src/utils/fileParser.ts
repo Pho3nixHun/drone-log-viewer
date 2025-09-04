@@ -1,10 +1,79 @@
-import type { MissionLog, MissionStats } from '../types/mission'
+import type { MissionLog, MissionStats, MergedMission, DropPoint, Waypoint } from '../types/mission'
 
 export class FileParseError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'FileParseError'
   }
+}
+
+function interpolateTimestamps<T extends { date: string }>(points: T[]): { points: T[], fixedCount: number } {
+  if (points.length === 0) return { points, fixedCount: 0 }
+  
+  let fixedCount = 0
+  const result = [...points]
+  
+  // Helper to check if a timestamp is invalid (before year 2000)
+  const isInvalidTimestamp = (dateStr: string) => {
+    const time = new Date(dateStr).getTime()
+    return isNaN(time) || time < 946684800000
+  }
+  
+  for (let i = 0; i < result.length; i++) {
+    if (isInvalidTimestamp(result[i].date)) {
+      // Find previous valid timestamp
+      let prevValidIndex = -1
+      for (let j = i - 1; j >= 0; j--) {
+        if (!isInvalidTimestamp(result[j].date)) {
+          prevValidIndex = j
+          break
+        }
+      }
+      
+      // Find next valid timestamp
+      let nextValidIndex = -1
+      for (let j = i + 1; j < result.length; j++) {
+        if (!isInvalidTimestamp(result[j].date)) {
+          nextValidIndex = j
+          break
+        }
+      }
+      
+      let interpolatedTime: number
+      
+      if (prevValidIndex !== -1 && nextValidIndex !== -1) {
+        // Interpolate between previous and next valid timestamps
+        const prevTime = new Date(result[prevValidIndex].date).getTime()
+        const nextTime = new Date(result[nextValidIndex].date).getTime()
+        const distanceFromPrev = i - prevValidIndex
+        const totalDistance = nextValidIndex - prevValidIndex
+        const interpolationFactor = distanceFromPrev / totalDistance
+        
+        interpolatedTime = prevTime + (nextTime - prevTime) * interpolationFactor
+      } else if (prevValidIndex !== -1) {
+        // Only previous valid timestamp available - add 1 second per step
+        const prevTime = new Date(result[prevValidIndex].date).getTime()
+        const stepsFromPrev = i - prevValidIndex
+        interpolatedTime = prevTime + (stepsFromPrev * 1000) // 1 second per step
+      } else if (nextValidIndex !== -1) {
+        // Only next valid timestamp available - subtract 1 second per step  
+        const nextTime = new Date(result[nextValidIndex].date).getTime()
+        const stepsToNext = nextValidIndex - i
+        interpolatedTime = nextTime - (stepsToNext * 1000) // 1 second per step
+      } else {
+        // No valid timestamps found - use current time as fallback
+        interpolatedTime = Date.now()
+      }
+      
+      result[i] = {
+        ...result[i],
+        date: new Date(interpolatedTime).toISOString()
+      }
+      fixedCount++
+    }
+  }
+  
+  return { points: result, fixedCount }
 }
 
 export async function parseJSONFile(file: File): Promise<MissionLog> {
@@ -33,6 +102,153 @@ export async function parseJSONFile(file: File): Promise<MissionLog> {
     }
     throw new FileParseError('Failed to parse file')
   }
+}
+
+export async function parseMultipleJSONFiles(files: File[]): Promise<MergedMission> {
+  if (files.length === 0) {
+    throw new FileParseError('No files provided')
+  }
+  
+  if (files.length === 1) {
+    const singleMission = await parseJSONFile(files[0])
+    
+    // Interpolate timestamps for invalid 1970 epoch dates
+    const { points: fixedDropPoints, fixedCount: dropPointsFixed } = interpolateTimestamps(singleMission.flightLog.dropPoints)
+    const { points: fixedWaypoints, fixedCount: waypointsFixed } = interpolateTimestamps(singleMission.flightLog.waypoints)
+    
+    const totalFixed = dropPointsFixed + waypointsFixed
+    if (totalFixed > 0) {
+      console.warn(`⚠️ Fixed ${totalFixed} invalid timestamps (${dropPointsFixed} drop points, ${waypointsFixed} waypoints) using interpolation. This data was missing and times are best-effort estimates.`)
+    }
+    
+    return {
+      ...singleMission,
+      flightLog: {
+        ...singleMission.flightLog,
+        dropPoints: fixedDropPoints,
+        waypoints: fixedWaypoints
+      },
+      sourceFiles: [files[0].name],
+      isMerged: false
+    }
+  }
+  
+  const missions: MissionLog[] = []
+  const sourceFiles: string[] = []
+  
+  // Parse all files and fix timestamps
+  let totalDropPointsFixed = 0
+  let totalWaypointsFixed = 0
+  
+  for (const file of files) {
+    try {
+      console.log(`Parsing file: ${file.name}`)
+      const mission = await parseJSONFile(file)
+      
+      // Fix timestamps in each mission before adding to the list
+      const { points: fixedDropPoints, fixedCount: dropPointsFixed } = interpolateTimestamps(mission.flightLog.dropPoints)
+      const { points: fixedWaypoints, fixedCount: waypointsFixed } = interpolateTimestamps(mission.flightLog.waypoints)
+      
+      totalDropPointsFixed += dropPointsFixed
+      totalWaypointsFixed += waypointsFixed
+      
+      const fixedMission = {
+        ...mission,
+        flightLog: {
+          ...mission.flightLog,
+          dropPoints: fixedDropPoints,
+          waypoints: fixedWaypoints
+        }
+      }
+      
+      console.log(`Successfully parsed ${file.name}:`, {
+        dropPoints: fixedDropPoints.length,
+        waypoints: fixedWaypoints.length,
+        timestampsFixed: dropPointsFixed + waypointsFixed,
+        fieldName: mission.fieldName
+      })
+      
+      missions.push(fixedMission)
+      sourceFiles.push(file.name)
+    } catch (error) {
+      console.error(`Failed to parse ${file.name}:`, error)
+      throw new FileParseError(`Failed to parse ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+  
+  const totalFixed = totalDropPointsFixed + totalWaypointsFixed
+  if (totalFixed > 0) {
+    console.warn(`⚠️ Fixed ${totalFixed} invalid timestamps across all files (${totalDropPointsFixed} drop points, ${totalWaypointsFixed} waypoints) using interpolation. This data was missing and times are best-effort estimates.`)
+  }
+  
+  // Merge missions
+  const baseMission = missions[0]
+  const mergedDropPoints: DropPoint[] = []
+  const mergedWaypoints: Waypoint[] = []
+  
+  // Color generation for different files (different shades)
+  const generateSourceIndex = (fileIndex: number) => fileIndex
+  
+  missions.forEach((mission, missionIndex) => {
+    const sourceIndex = generateSourceIndex(missionIndex)
+    const sourceFile = sourceFiles[missionIndex]
+    
+    // Add drop points with source tracking (timestamps already fixed)
+    mission.flightLog.dropPoints.forEach(point => {
+      mergedDropPoints.push({
+        ...point,
+        sourceFile,
+        sourceIndex
+      })
+    })
+    
+    // Add waypoints with source tracking (timestamps already fixed)
+    mission.flightLog.waypoints.forEach(point => {
+      mergedWaypoints.push({
+        ...point,
+        sourceFile,
+        sourceIndex
+      })
+    })
+  })
+  
+  // Sort by timestamp to maintain chronological order
+  mergedDropPoints.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  mergedWaypoints.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  
+  // Calculate merged dates
+  const allTimestamps = [
+    ...mergedDropPoints.map(p => new Date(p.date).getTime()),
+    ...mergedWaypoints.map(p => new Date(p.date).getTime())
+  ].filter(t => !isNaN(t) && t > 946684800000) // Filter out dates before year 2000
+   .sort((a, b) => a - b)
+  
+  const startDate = allTimestamps.length > 0 ? new Date(allTimestamps[0]).toISOString() : baseMission.flightLog.startDate
+  const endDate = allTimestamps.length > 0 ? new Date(allTimestamps[allTimestamps.length - 1]).toISOString() : baseMission.flightLog.endDate
+  
+  // Create merged mission
+  const mergedMission: MergedMission = {
+    appVersion: baseMission.appVersion,
+    droneName: baseMission.droneName,
+    fieldName: `Merged: ${missions.map(m => m.fieldName).join(', ')}`,
+    pilotName: baseMission.pilotName,
+    uploaded: baseMission.uploaded,
+    sourceFiles,
+    isMerged: true,
+    flightLog: {
+      dropPoints: mergedDropPoints,
+      waypoints: mergedWaypoints,
+      endDate,
+      startDate,
+      flightDate: baseMission.flightLog.flightDate,
+      homepoint: baseMission.flightLog.homepoint,
+      pilotName: baseMission.flightLog.pilotName,
+      polygon: baseMission.flightLog.polygon,
+      trichogrammaBullets: missions.reduce((sum, m) => sum + (m.flightLog.trichogrammaBullets || 0), 0)
+    }
+  }
+  
+  return mergedMission
 }
 
 function validateMissionLog(data: any): void {
@@ -122,7 +338,7 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
       minAltitude: 0,
       maxAltitude: 0,
       averageSpeed: 0,
-      coveredAreaAcres: 0,
+      coveredAreaHectares: 0,
       averageDropDistance: 0,
       averageDropLineDistance: 0
     }
@@ -142,9 +358,12 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
   const totalDistance = calculateTotalDistance(waypoints)
   
   // Calculate covered area and drop distances
-  const coveredAreaAcres = calculateCoveredAreaAcres(dropPoints)
+  const coveredAreaHectares = calculateCoveredAreaHectares(dropPoints)
   const { averageDropDistance, averageDropLineDistance } = calculateDropDistances(dropPoints)
   
+  // Calculate max drops per minute
+  const maxDropPerMinute = calculateMaxDropPerMinute(dropPoints)
+
   return {
     dropPointsCount: dropPoints.length,
     waypointsCount: waypoints.length,
@@ -154,9 +373,10 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
     minAltitude: Math.round(minAltitude * 100) / 100,
     maxAltitude: Math.round(maxAltitude * 100) / 100,
     averageSpeed: Math.round(averageSpeed * 100) / 100,
-    coveredAreaAcres: Math.round(coveredAreaAcres * 100) / 100,
+    coveredAreaHectares: Math.round(coveredAreaHectares * 100) / 100,
     averageDropDistance: Math.round(averageDropDistance * 100) / 100,
-    averageDropLineDistance: Math.round(averageDropLineDistance * 100) / 100
+    averageDropLineDistance: Math.round(averageDropLineDistance * 100) / 100,
+    maxDropPerMinute: Math.round(maxDropPerMinute * 100) / 100
   }
 }
 
@@ -191,7 +411,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c
 }
 
-function calculateCoveredAreaAcres(dropPoints: any[]): number {
+function calculateCoveredAreaHectares(dropPoints: any[]): number {
   if (dropPoints.length < 3) return 0
   
   // Filter out invalid coordinates
@@ -215,11 +435,11 @@ function calculateCoveredAreaAcres(dropPoints: any[]): number {
   const bufferedWidth = width + 20
   const bufferedHeight = height + 20
   
-  // Calculate area in square meters, then convert to acres
+  // Calculate area in square meters, then convert to hectares
   const areaSquareMeters = bufferedWidth * bufferedHeight
-  const areaAcres = areaSquareMeters * 0.000247105 // 1 square meter = 0.000247105 acres
+  const areaHectares = areaSquareMeters * 0.0001 // 1 square meter = 0.0001 hectares
   
-  return areaAcres
+  return areaHectares
 }
 
 function calculateDropDistances(dropPoints: any[]): { averageDropDistance: number, averageDropLineDistance: number } {
@@ -307,4 +527,31 @@ function calculateDropDistances(dropPoints: any[]): { averageDropDistance: numbe
     averageDropDistance,
     averageDropLineDistance
   }
+}
+
+function calculateMaxDropPerMinute(dropPoints: any[]): number {
+  if (dropPoints.length < 2) return 0
+  
+  // Filter out invalid coordinates and sort by timestamp
+  const validPoints = dropPoints
+    .filter(p => p.latitude !== 0 && p.longitude !== 0 && p.date)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  
+  if (validPoints.length < 2) return 0
+  
+  // Group drops by minute intervals
+  const dropsPerMinute: { [key: string]: number } = {}
+  
+  for (const point of validPoints) {
+    const timestamp = new Date(point.date)
+    // Round down to the nearest minute
+    const minuteKey = new Date(timestamp.getFullYear(), timestamp.getMonth(), timestamp.getDate(), 
+                               timestamp.getHours(), timestamp.getMinutes()).toISOString()
+    
+    dropsPerMinute[minuteKey] = (dropsPerMinute[minuteKey] || 0) + 1
+  }
+  
+  // Find the maximum drops in any single minute
+  const dropCounts = Object.values(dropsPerMinute)
+  return dropCounts.length > 0 ? Math.max(...dropCounts) : 0
 }

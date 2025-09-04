@@ -1,28 +1,45 @@
 import { create } from 'zustand'
-import type { MissionLog, LayerType, MissionStats } from '../types/mission'
-import { parseJSONFile, calculateMissionStats, FileParseError } from '../utils/fileParser'
+import type { LayerType, MissionStats, MergedMission, MissionSettings } from '../types/mission'
+import { parseMultipleJSONFiles, calculateMissionStats, FileParseError } from '../utils/fileParser'
 import { getMapCenter, getBounds, generatePolygonFromPoints } from '../utils/mapHelpers'
 
 interface MissionStore {
   // Data
-  currentMission: MissionLog | null
+  currentMission: MergedMission | null
   missionStats: MissionStats | null
   
   // UI State
   selectedLayers: Set<LayerType>
+  selectedSourceFiles: Set<string>
   mapCenter: [number, number] | null
   mapZoom: number
   tileLayer: 'osm' | 'satellite'
+  timeRange: [number, number] | null
+  
+  // Replay State
+  isReplaying: boolean
+  replaySpeed: number // Multiplier: 1x, 2x, 5x, 10x
+  replayCurrentTime: number | null
+  replayStartTime: number | null
+  replayEndTime: number | null
   
   // Loading and Error States
   isLoading: boolean
   error: string | null
   
   // Actions
-  loadMission: (file: File) => Promise<void>
+  loadMission: (files: File | File[]) => Promise<void>
+  loadMissionSettings: (files: File | File[]) => Promise<void>
   toggleLayer: (layer: LayerType) => void
+  toggleSourceFile: (sourceFile: string) => void
   setMapView: (center: [number, number], zoom: number) => void
   setTileLayer: (layer: 'osm' | 'satellite') => void
+  setTimeRange: (range: [number, number] | null) => void
+  startReplay: () => void
+  pauseReplay: () => void
+  resetReplay: () => void
+  setReplaySpeed: (speed: number) => void
+  setReplayCurrentTime: (time: number) => void
   clearError: () => void
   reset: () => void
 }
@@ -32,19 +49,30 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
   currentMission: null,
   missionStats: null,
   selectedLayers: new Set(['dropPoints']),
+  selectedSourceFiles: new Set(),
   mapCenter: null,
   mapZoom: 13,
   tileLayer: 'osm',
+  timeRange: null,
+  isReplaying: false,
+  replaySpeed: 1,
+  replayCurrentTime: null,
+  replayStartTime: null,
+  replayEndTime: null,
   isLoading: false,
   error: null,
   
   // Actions
-  loadMission: async (file: File) => {
+  loadMission: async (files: File | File[]) => {
     set({ isLoading: true, error: null })
     
     try {
-      const mission = await parseJSONFile(file)
+      const fileArray = Array.isArray(files) ? files : [files]
+      console.log('Loading files:', fileArray.map(f => f.name))
+      const mission = await parseMultipleJSONFiles(fileArray)
+      console.log('Mission parsed successfully:', mission.fieldName, 'Drop points:', mission.flightLog.dropPoints.length, 'Waypoints:', mission.flightLog.waypoints.length)
       const stats = calculateMissionStats(mission)
+      console.log('Stats calculated successfully:', stats)
       
       // Generate polygon from drop points if no polygon exists
       if (!mission.flightLog.polygon || mission.flightLog.polygon.trim() === '' || mission.flightLog.polygon === '-1') {
@@ -61,11 +89,24 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
       const center = getMapCenter(allPoints)
       const bounds = getBounds(allPoints)
       
+      // Calculate replay time bounds
+      const timestamps = allPoints
+        .map(p => new Date(p.date).getTime())
+        .filter(t => !isNaN(t) && t > 946684800000) // Filter out dates before year 2000
+        .sort((a, b) => a - b)
+      
+      const startTime = timestamps.length > 0 ? timestamps[0] : null
+      const endTime = timestamps.length > 0 ? timestamps[timestamps.length - 1] : null
+      
       set({
         currentMission: mission,
         missionStats: stats,
+        selectedSourceFiles: new Set(mission.sourceFiles), // Enable all source files by default
         mapCenter: center,
         mapZoom: bounds ? 15 : 13,
+        replayStartTime: startTime,
+        replayEndTime: endTime,
+        replayCurrentTime: startTime,
         isLoading: false,
         error: null
       })
@@ -76,6 +117,82 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
         error: error instanceof FileParseError 
           ? error.message 
           : 'Failed to load mission file'
+      })
+    }
+  },
+
+  loadMissionSettings: async (files: File | File[]) => {
+    const { currentMission } = get()
+    if (!currentMission) {
+      set({ error: 'Please load mission log files first before uploading mission settings.' })
+      return
+    }
+
+    set({ isLoading: true, error: null })
+    
+    try {
+      const fileArray = Array.isArray(files) ? files : [files]
+      const missionSettings: MissionSettings[] = []
+      
+      for (const file of fileArray) {
+        if (!file.name.endsWith('.wdm')) {
+          throw new Error(`Please select WDM mission files. Invalid file: ${file.name}`)
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+          throw new Error(`File size too large for ${file.name}. Please select a file smaller than 5MB`)
+        }
+
+        const text = await file.text()
+        const settings: MissionSettings = JSON.parse(text)
+        
+        // Validate the structure
+        if (!settings.info || !settings.polygon || !settings.missionParams) {
+          throw new Error(`Invalid WDM file structure in ${file.name}`)
+        }
+
+        // Add filename to track which file this came from
+        settings.filename = file.name
+
+        console.log('Mission settings loaded successfully:', settings.info.name, 'from', file.name)
+        missionSettings.push(settings)
+      }
+      
+      // Update the current mission with the settings
+      const updatedMission = {
+        ...currentMission,
+        missionSettings
+      }
+
+      // Use the first WDM file's polygon if available (for backward compatibility)
+      if (missionSettings.length > 0 && missionSettings[0].info.areaCalc > 0) {
+        const polygonString = missionSettings[0].polygon.map(coord => `${coord[0]},${coord[1]}`).join(' ')
+        updatedMission.flightLog.polygon = polygonString
+      }
+
+      // Add mission settings to selectedSourceFiles
+      const { selectedSourceFiles } = get()
+      const newSelectedSourceFiles = new Set(selectedSourceFiles)
+      
+      // Add each WDM file as a source file
+      missionSettings.forEach(settings => {
+        if (settings.filename) {
+          newSelectedSourceFiles.add(settings.filename)
+        }
+      })
+
+      set({
+        currentMission: updatedMission,
+        selectedSourceFiles: newSelectedSourceFiles,
+        isLoading: false,
+        error: null
+      })
+      
+    } catch (error) {
+      console.error('Failed to load mission settings:', error)
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to load mission settings files'
       })
     }
   },
@@ -93,12 +210,57 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     set({ selectedLayers: newLayers })
   },
   
+  toggleSourceFile: (sourceFile: string) => {
+    const { selectedSourceFiles } = get()
+    const newSourceFiles = new Set(selectedSourceFiles)
+    
+    if (newSourceFiles.has(sourceFile)) {
+      newSourceFiles.delete(sourceFile)
+    } else {
+      newSourceFiles.add(sourceFile)
+    }
+    
+    set({ selectedSourceFiles: newSourceFiles })
+  },
+  
   setMapView: (center: [number, number], zoom: number) => {
     set({ mapCenter: center, mapZoom: zoom })
   },
   
   setTileLayer: (layer: 'osm' | 'satellite') => {
     set({ tileLayer: layer })
+  },
+  
+  setTimeRange: (range: [number, number] | null) => {
+    set({ timeRange: range })
+  },
+  
+  startReplay: () => {
+    const { replayStartTime } = get()
+    set({ 
+      isReplaying: true,
+      replayCurrentTime: replayStartTime
+    })
+  },
+  
+  pauseReplay: () => {
+    set({ isReplaying: false })
+  },
+  
+  resetReplay: () => {
+    const { replayStartTime } = get()
+    set({ 
+      isReplaying: false,
+      replayCurrentTime: replayStartTime
+    })
+  },
+  
+  setReplaySpeed: (speed: number) => {
+    set({ replaySpeed: speed })
+  },
+  
+  setReplayCurrentTime: (time: number) => {
+    set({ replayCurrentTime: time })
   },
   
   clearError: () => {
@@ -110,9 +272,16 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
       currentMission: null,
       missionStats: null,
       selectedLayers: new Set(['dropPoints']),
+      selectedSourceFiles: new Set(),
       mapCenter: null,
       mapZoom: 13,
       tileLayer: 'osm',
+      timeRange: null,
+      isReplaying: false,
+      replaySpeed: 1,
+      replayCurrentTime: null,
+      replayStartTime: null,
+      replayEndTime: null,
       isLoading: false,
       error: null
     })

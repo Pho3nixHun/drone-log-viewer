@@ -4,10 +4,13 @@ import { Container, Stack, Grid, Paper, Box } from '@mantine/core'
 import { MainLayout } from './components/Layout/MainLayout'
 import { FileUploader } from './components/FileUploader/FileUploader'
 import { MapViewer } from './components/MapViewer/MapViewer'
+import { MapControlsSidebar } from './components/MapViewer/MapControlsSidebar'
+import { MissionParameters } from './components/ReportPanel/MissionParameters'
 import { MissionSummary } from './components/ReportPanel/MissionSummary'
 import { FlightStats } from './components/ReportPanel/FlightStats'
 import { TrichogrammaCanvas } from './components/TrichogrammaCanvas/TrichogrammaCanvas'
 import { useMissionStore } from './stores/missionStore'
+import './i18n/i18n'
 
 function App() {
   const { currentMission } = useMissionStore()
@@ -37,19 +40,27 @@ function App() {
                 }}
               >
               <Stack gap={0}>
-                {/* Map Section - Full Width */}
+                {/* Map Section with Controls Below */}
                 <Box 
                   p="lg"
                   style={{ 
                     borderBottom: '2px solid #f1f3f4',
                   }}
                 >
-                  <MapViewer height="260mm" />
+                  <Stack gap="md">
+                    <MapViewer height="200mm" />
+                    <Paper p="md" withBorder>
+                      <MapControlsSidebar />
+                    </Paper>
+                  </Stack>
                 </Box>
                 
-                {/* Reports Section - Two Columns */}
+                {/* Reports Section - Mission Parameters on Top, Summary and Stats Below */}
                 <Box p="lg" style={{ borderBottom: '2px solid #f1f3f4', pageBreakBefore: 'always' }}>
                   <Grid gutter="xl">
+                    <Grid.Col span={12}>
+                      <MissionParameters />
+                    </Grid.Col>
                     <Grid.Col span={6}>
                       <MissionSummary />
                     </Grid.Col>

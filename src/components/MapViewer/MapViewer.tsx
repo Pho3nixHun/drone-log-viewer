@@ -8,6 +8,7 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DefaultIcon = (L as any).icon({
   iconUrl: markerIcon,
   iconRetinaUrl: markerIconRetina,
@@ -22,10 +23,11 @@ const DefaultIcon = (L as any).icon({
 L.Marker.prototype.options.icon = DefaultIcon
 
 import { useMissionStore } from '../../stores/missionStore'
-import { LayerControls } from './LayerControls'
 import { DropPointsLayer } from './DropPointsLayer'
 import { WaypointsLayer } from './WaypointsLayer'
 import { PolygonLayer } from './PolygonLayer'
+import { MissionWaypointsLayer } from './MissionWaypointsLayer'
+import { PolygonUnionLayer } from './PolygonUnionLayer'
 
 interface MapViewerProps {
   height?: number | string
@@ -63,12 +65,11 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
     <Box pos="relative" h={height}>
       <LoadingOverlay visible={isLoading} />
       
-      <LayerControls />
-      
       <MapContainer
         // @ts-expect-error - React Leaflet v5 type issues
         center={center}
         zoom={zoom}
+        maxZoom={25}
         style={{ height: '100%', width: '100%' }}
       >
         {tileLayer === 'osm' ? (
@@ -88,6 +89,8 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
         {selectedLayers.has('dropPoints') && <DropPointsLayer />}
         {selectedLayers.has('waypoints') && <WaypointsLayer />}
         {selectedLayers.has('polygon') && <PolygonLayer />}
+        {selectedLayers.has('polygonUnion') && <PolygonUnionLayer />}
+        {selectedLayers.has('missionWaypoints') && <MissionWaypointsLayer />}
       </MapContainer>
     </Box>
   )

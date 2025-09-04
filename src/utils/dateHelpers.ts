@@ -29,3 +29,16 @@ export function formatDateShort(dateString: string): string {
     return dateString
   }
 }
+
+export function formatTimeOnly(dateString: string): string {
+  try {
+    const dateTimeFormatter = new Intl.DateTimeFormat("en-gb", {
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric'
+    })
+    return dateTimeFormatter.format(new Date(dateString))
+  } catch {
+    return dateString
+  }
+}

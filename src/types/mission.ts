@@ -7,6 +7,42 @@ export interface MissionLog {
   uploaded: boolean
 }
 
+export interface MissionSettings {
+  filename?: string // Added to track which file this came from
+  info: {
+    name: string
+    area: number
+    areaCalc: number
+    routeLength: number
+    dropCountEst: number
+    durationMillisEst: number
+    additionalOptions: any[]
+  }
+  polygon: [number, number][]
+  missionWaypoints: [number, number][]
+  missionParams: {
+    dDL: number // line spacing in meters
+    dTFB: number // drop distance (format unknown)
+    linesOffset: number
+    startingPos: number // corner to start from (1-4)
+    altitude: number // altitude in meters
+    speed: number // speed in m/s
+    angle: number // angle of flight lines in degrees
+  }
+}
+
+export interface MergedMission {
+  appVersion: number
+  droneName: string
+  fieldName: string
+  flightLog: FlightLog
+  pilotName: string
+  uploaded: boolean
+  sourceFiles: string[]
+  isMerged: boolean
+  missionSettings?: MissionSettings[]
+}
+
 export interface FlightLog {
   dropPoints: DropPoint[]
   endDate: string
@@ -26,6 +62,8 @@ export interface DropPoint {
   latitude: number
   longitude: number
   speed: number
+  sourceFile?: string
+  sourceIndex?: number
 }
 
 export interface Homepoint {
@@ -42,10 +80,12 @@ export interface Waypoint {
   latitude: number
   longitude: number
   speed: number
+  sourceFile?: string
+  sourceIndex?: number
 }
 
 // Additional types for the application state
-export type LayerType = 'dropPoints' | 'waypoints' | 'polygon'
+export type LayerType = 'dropPoints' | 'waypoints' | 'polygon' | 'missionWaypoints' | 'polygonUnion'
 
 export interface MissionStats {
   dropPointsCount: number
@@ -56,7 +96,8 @@ export interface MissionStats {
   minAltitude: number
   maxAltitude: number
   averageSpeed: number
-  coveredAreaAcres: number
+  coveredAreaHectares: number
   averageDropDistance: number
   averageDropLineDistance: number
+  maxDropPerMinute: number
 }
