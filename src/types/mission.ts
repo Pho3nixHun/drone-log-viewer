@@ -85,7 +85,7 @@ export interface Waypoint {
 }
 
 // Additional types for the application state
-export type LayerType = 'dropPoints' | 'waypoints' | 'polygon' | 'missionWaypoints' | 'polygonUnion'
+export type LayerType = 'dropPoints' | 'waypoints' | 'polygon' | 'missionWaypoints' | 'polygonUnion' | 'heatmap'
 
 export interface MissionStats {
   dropPointsCount: number

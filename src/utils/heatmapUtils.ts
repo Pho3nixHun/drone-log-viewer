@@ -10,11 +10,18 @@ import {
   type HeatmapParamsGPU 
 } from './webgpuUtils'
 
+export type DistributionMethod = 'gaussian' | 'levy-flight' | 'exponential'
+
 export interface HeatmapParameters {
-  sigma: number // Standard deviation in meters
+  sigma: number // Standard deviation in meters (for Gaussian)
   maxDistance: number // Maximum distance in meters
   insectsPerDrop: number // Insects per drop point
   resolution: number // Canvas resolution multiplier
+  distributionMethod: DistributionMethod // Distribution method for density calculation
+  
+  // Distribution-specific parameters
+  levyAlpha?: number // Lévy flight stability parameter (1.0-2.0, default 1.5)
+  exponentialLambda?: number // Exponential decay rate (default 0.2)
 }
 
 export interface DensityMapData {
@@ -36,6 +43,41 @@ export interface DensityMapData {
 export interface DropPoint {
   latitude: number
   longitude: number
+}
+
+/**
+ * Calculate distribution value based on distance and parameters
+ * @param meterDistance Distance in meters from drop point
+ * @param parameters Heatmap parameters including distribution method
+ * @returns Distribution value between 0 and 1
+ */
+function calculateDistributionValue(meterDistance: number, parameters: HeatmapParameters): number {
+  switch (parameters.distributionMethod) {
+    case 'gaussian':
+      // Standard Gaussian distribution
+      return Math.exp(-(meterDistance * meterDistance) / (2 * parameters.sigma * parameters.sigma))
+    
+    case 'levy-flight': {
+      // Lévy stable distribution - proper implementation
+      const alpha = parameters.levyAlpha || 1.8
+      if (meterDistance === 0) return 1.0
+      
+      const scale = parameters.sigma
+      const normalizedDistance = meterDistance / scale
+      
+      // Standard Lévy distribution formula
+      return Math.pow(1 + normalizedDistance * normalizedDistance, -alpha / 2)
+    }
+    
+    case 'exponential': {
+      // Standard exponential distribution
+      const lambda = parameters.exponentialLambda || 0.125
+      return Math.exp(-lambda * meterDistance)
+    }
+    
+    default:
+      return Math.exp(-(meterDistance * meterDistance) / (2 * parameters.sigma * parameters.sigma))
+  }
 }
 
 /**
@@ -138,9 +180,9 @@ export async function calculateDensityMapAsync(
           
           // Only calculate if within max distance range
           if (meterDistance <= parameters.maxDistance) {
-            // Calculate Gaussian density contribution
-            const gaussianValue = Math.exp(-(meterDistance * meterDistance) / (2 * parameters.sigma * parameters.sigma))
-            totalDensity += gaussianValue
+            // Calculate density contribution using selected distribution method
+            const distributionValue = calculateDistributionValue(meterDistance, parameters)
+            totalDensity += distributionValue
           }
         })
         
@@ -217,9 +259,9 @@ export function calculateDensityMap(
         
         // Only calculate if within max distance range
         if (meterDistance <= parameters.maxDistance) {
-          // Calculate Gaussian density contribution
-          const gaussianValue = Math.exp(-(meterDistance * meterDistance) / (2 * parameters.sigma * parameters.sigma))
-          totalDensity += gaussianValue
+          // Calculate density contribution using selected distribution method
+          const distributionValue = calculateDistributionValue(meterDistance, parameters)
+          totalDensity += distributionValue
         }
       })
       
@@ -385,6 +427,9 @@ struct HeatmapParams {
   boundedMaxLng: f32,
   boundedLatRange: f32,
   boundedLngRange: f32,
+  distributionMethod: u32, // 0=gaussian, 1=levy-flight, 2=exponential
+  levyAlpha: f32,
+  exponentialLambda: f32,
 }
 
 @group(0) @binding(0) var<storage, read> dropPoints: array<vec2f>;
@@ -400,6 +445,34 @@ fn calculateGPSDistanceFast(lat1: f32, lng1: f32, lat2: f32, lng2: f32) -> f32 {
   let dLng = (lng2 - lng1) * toRad * cos(avgLat);
   
   return R * sqrt(dLat * dLat + dLng * dLng);
+}
+
+fn calculateDistributionValue(distance: f32, params: HeatmapParams) -> f32 {
+  switch (params.distributionMethod) {
+    case 0u: {
+      // Gaussian distribution
+      let sigmaSquared = params.sigma * params.sigma;
+      let exponent = -(distance * distance) / (2.0 * sigmaSquared);
+      return exp(exponent);
+    }
+    case 1u: {
+      // Lévy flight distribution
+      if (distance == 0.0) { return 1.0; }
+      let scale = params.sigma;
+      let normalizedDistance = distance / scale;
+      return pow(1.0 + normalizedDistance * normalizedDistance, -params.levyAlpha / 2.0);
+    }
+    case 2u: {
+      // Exponential distribution
+      return exp(-params.exponentialLambda * distance);
+    }
+    default: {
+      // Default to Gaussian
+      let sigmaSquared = params.sigma * params.sigma;
+      let exponent = -(distance * distance) / (2.0 * sigmaSquared);
+      return exp(exponent);
+    }
+  }
 }
 
 @compute @workgroup_size(16, 16)
@@ -422,9 +495,7 @@ fn computeDensity(@builtin(global_invocation_id) global_id: vec3u) {
     let distance = calculateGPSDistanceFast(pixelLat, pixelLng, dropPoint.x, dropPoint.y);
     
     if (distance <= params.maxDistance) {
-      let sigmaSquared = params.sigma * params.sigma;
-      let exponent = -(distance * distance) / (2.0 * sigmaSquared);
-      totalDensity += exp(exponent);
+      totalDensity += calculateDistributionValue(distance, params);
     }
   }
   
@@ -470,6 +541,12 @@ export async function calculateDensityMapGPU(
     )
 
     // Prepare GPU parameters
+    const distributionMethodMap = {
+      'gaussian': 0,
+      'levy-flight': 1,
+      'exponential': 2
+    } as const
+
     const gpuParams: HeatmapParamsGPU = {
       canvasWidth,
       canvasHeight,
@@ -483,7 +560,10 @@ export async function calculateDensityMapGPU(
       boundedMinLng: bounds.boundedMinLng,
       boundedMaxLng: bounds.boundedMaxLng,
       boundedLatRange: bounds.boundedLatRange,
-      boundedLngRange: bounds.boundedLngRange
+      boundedLngRange: bounds.boundedLngRange,
+      distributionMethod: distributionMethodMap[parameters.distributionMethod],
+      levyAlpha: parameters.levyAlpha || 1.8,
+      exponentialLambda: parameters.exponentialLambda || 0.125
     }
 
     // Create compute pipeline

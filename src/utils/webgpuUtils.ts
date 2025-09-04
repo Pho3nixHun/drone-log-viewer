@@ -24,6 +24,9 @@ export interface HeatmapParamsGPU {
   boundedMaxLng: number
   boundedLatRange: number
   boundedLngRange: number
+  distributionMethod: number // 0=gaussian, 1=levy-flight, 2=exponential
+  levyAlpha: number
+  exponentialLambda: number
 }
 
 let webgpuContext: WebGPUContext | null = null
@@ -140,7 +143,7 @@ export function createHeatmapBuffers(
   device.queue.writeBuffer(dropPointBuffer, 0, dropPointData)
 
   // Prepare parameters data (aligned to 16 bytes for uniform buffer)
-  const paramsData = new ArrayBuffer(64) // 13 floats + padding = 64 bytes
+  const paramsData = new ArrayBuffer(80) // 16 values (13 original + 3 new) = 80 bytes
   const paramsView = new DataView(paramsData)
   let offset = 0
   
@@ -156,7 +159,10 @@ export function createHeatmapBuffers(
   paramsView.setFloat32(offset, parameters.boundedMinLng, true); offset += 4
   paramsView.setFloat32(offset, parameters.boundedMaxLng, true); offset += 4
   paramsView.setFloat32(offset, parameters.boundedLatRange, true); offset += 4
-  paramsView.setFloat32(offset, parameters.boundedLngRange, true)
+  paramsView.setFloat32(offset, parameters.boundedLngRange, true); offset += 4
+  paramsView.setUint32(offset, parameters.distributionMethod, true); offset += 4
+  paramsView.setFloat32(offset, parameters.levyAlpha, true); offset += 4
+  paramsView.setFloat32(offset, parameters.exponentialLambda, true)
 
   // Create parameters buffer
   const paramsBuffer = device.createBuffer({

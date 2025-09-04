@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { LayerType, MissionStats, MergedMission, MissionSettings } from '../types/mission'
+import type { DensityMapData } from '../utils/heatmapUtils'
 import { parseMultipleJSONFiles, calculateMissionStats, FileParseError } from '../utils/fileParser'
 import { getMapCenter, getBounds, generatePolygonFromPoints } from '../utils/mapHelpers'
 
@@ -7,6 +8,7 @@ interface MissionStore {
   // Data
   currentMission: MergedMission | null
   missionStats: MissionStats | null
+  heatmapData: DensityMapData | null
   
   // UI State
   selectedLayers: Set<LayerType>
@@ -32,6 +34,7 @@ interface MissionStore {
   loadMissionSettings: (files: File | File[]) => Promise<void>
   toggleLayer: (layer: LayerType) => void
   toggleSourceFile: (sourceFile: string) => void
+  removeSourceFile: (sourceFile: string) => void
   setMapView: (center: [number, number], zoom: number) => void
   setTileLayer: (layer: 'osm' | 'satellite') => void
   setTimeRange: (range: [number, number] | null) => void
@@ -40,6 +43,7 @@ interface MissionStore {
   resetReplay: () => void
   setReplaySpeed: (speed: number) => void
   setReplayCurrentTime: (time: number) => void
+  setHeatmapData: (data: DensityMapData | null) => void
   clearError: () => void
   reset: () => void
 }
@@ -48,6 +52,7 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
   // Initial state
   currentMission: null,
   missionStats: null,
+  heatmapData: null,
   selectedLayers: new Set(['dropPoints']),
   selectedSourceFiles: new Set(),
   mapCenter: null,
@@ -222,6 +227,72 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     
     set({ selectedSourceFiles: newSourceFiles })
   },
+
+  removeSourceFile: (sourceFile: string) => {
+    const { currentMission, selectedSourceFiles } = get()
+    if (!currentMission) return
+
+    // Remove from selectedSourceFiles
+    const newSelectedSourceFiles = new Set(selectedSourceFiles)
+    newSelectedSourceFiles.delete(sourceFile)
+
+    // Check if it's a WDM file (mission settings)
+    const isWDMFile = sourceFile.endsWith('.wdm') || 
+      (currentMission.missionSettings?.some(settings => 
+        (settings.filename || `wdm-${currentMission.missionSettings?.indexOf(settings)}`) === sourceFile
+      ) ?? false)
+
+    if (isWDMFile && currentMission.missionSettings) {
+      // Remove WDM file from mission settings
+      const updatedMissionSettings = currentMission.missionSettings.filter(settings => 
+        (settings.filename || `wdm-${currentMission.missionSettings?.indexOf(settings)}`) !== sourceFile
+      )
+
+      const updatedMission = {
+        ...currentMission,
+        missionSettings: updatedMissionSettings.length > 0 ? updatedMissionSettings : undefined
+      }
+
+      set({ 
+        currentMission: updatedMission,
+        selectedSourceFiles: newSelectedSourceFiles 
+      })
+    } else {
+      // It's a JSON log file - filter out data from this source file
+      const filteredDropPoints = currentMission.flightLog.dropPoints.filter(
+        point => point.sourceFile !== sourceFile
+      )
+      const filteredWaypoints = currentMission.flightLog.waypoints.filter(
+        point => point.sourceFile !== sourceFile
+      )
+
+      // Remove from sourceFiles array
+      const updatedSourceFiles = currentMission.sourceFiles.filter(sf => sf !== sourceFile)
+
+      // Update isMerged flag
+      const isMerged = updatedSourceFiles.length > 1
+
+      const updatedMission = {
+        ...currentMission,
+        sourceFiles: updatedSourceFiles,
+        isMerged,
+        flightLog: {
+          ...currentMission.flightLog,
+          dropPoints: filteredDropPoints,
+          waypoints: filteredWaypoints
+        }
+      }
+
+      // Recalculate stats with the filtered data
+      const updatedStats = calculateMissionStats(updatedMission)
+
+      set({ 
+        currentMission: updatedMission,
+        missionStats: updatedStats,
+        selectedSourceFiles: newSelectedSourceFiles 
+      })
+    }
+  },
   
   setMapView: (center: [number, number], zoom: number) => {
     set({ mapCenter: center, mapZoom: zoom })
@@ -263,6 +334,10 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     set({ replayCurrentTime: time })
   },
   
+  setHeatmapData: (data: DensityMapData | null) => {
+    set({ heatmapData: data })
+  },
+  
   clearError: () => {
     set({ error: null })
   },
@@ -271,6 +346,7 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     set({
       currentMission: null,
       missionStats: null,
+      heatmapData: null,
       selectedLayers: new Set(['dropPoints']),
       selectedSourceFiles: new Set(),
       mapCenter: null,

@@ -27,13 +27,14 @@ import { WaypointsLayer } from './WaypointsLayer'
 import { PolygonLayer } from './PolygonLayer'
 import { MissionWaypointsLayer } from './MissionWaypointsLayer'
 import { PolygonUnionLayer } from './PolygonUnionLayer'
+import HeatmapLayer from './HeatmapLayer'
 
 interface MapViewerProps {
   height?: number | string
 }
 
 export function MapViewer({ height = 500 }: MapViewerProps) {
-  const { currentMission, mapCenter, mapZoom, selectedLayers, tileLayer, isLoading } = useMissionStore()
+  const { currentMission, mapCenter, mapZoom, selectedLayers, tileLayer, isLoading, heatmapData } = useMissionStore()
 
   // Default center (Budapest, Hungary - close to the sample data)
   const defaultCenter: [number, number] = [46.3314, 21.0679]
@@ -87,6 +88,7 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
         {selectedLayers.has('polygon') && <PolygonLayer />}
         {selectedLayers.has('polygonUnion') && <PolygonUnionLayer />}
         {selectedLayers.has('missionWaypoints') && <MissionWaypointsLayer />}
+        {selectedLayers.has('heatmap') && <HeatmapLayer densityMapData={heatmapData} />}
       </MapContainer>
     </Box>
   )

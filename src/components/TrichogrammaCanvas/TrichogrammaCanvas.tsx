@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Card, Text, Box, Button, Group, NumberInput, Grid, Paper, LoadingOverlay, Progress, Switch, Tooltip } from '@mantine/core'
+import { Card, Text, Box, Button, Group, NumberInput, Grid, Paper, LoadingOverlay, Progress, Switch, Tooltip, Tabs } from '@mantine/core'
 import { IconChartDots, IconSettings } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
@@ -18,12 +18,18 @@ import {
   calculateDensityMapGPU,
   calculateLocalDensityPerArea,
   type HeatmapParameters,
-  type DensityMapData 
+  type DensityMapData,
+  type DistributionMethod
 } from '../../utils/heatmapUtils'
 import { isWebGPUSupported } from '../../utils/webgpuUtils'
 
+// Type guard function to check if a value is a valid DistributionMethod
+function isDistributionMethod(value: string | null): value is DistributionMethod {
+  return value === 'gaussian' || value === 'levy-flight' || value === 'exponential'
+}
+
 export function TrichogrammaCanvas() {
-  const { currentMission } = useMissionStore()
+  const { currentMission, setHeatmapData } = useMissionStore()
   const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const densityMapRef = useRef<DensityMapData | null>(null)
@@ -45,12 +51,15 @@ export function TrichogrammaCanvas() {
     coverage: ''
   })
 
-  // Heatmap parameters
+  // Heatmap parameters - Research-based defaults
   const [parameters, setParameters] = useState<HeatmapParameters>({
-    sigma: 5, // Standard deviation in meters
-    maxDistance: 15, // Maximum distance in meters
-    insectsPerDrop: 1200, // Insects per drop point
-    resolution: 2 // Canvas resolution multiplier
+    sigma: 8, // Standard deviation in meters - Based on field studies showing 8.01m mean radius
+    maxDistance: 30, // Maximum distance in meters - Based on 98% dispersal within 27.5m
+    insectsPerDrop: 1000, // Insects per drop point - Standard commercial capsule format
+    resolution: 2, // Canvas resolution multiplier
+    distributionMethod: 'gaussian', // Distribution method for insect dispersal
+    levyAlpha: 1.8, // Lévy flight stability parameter - Optimal foraging balance
+    exponentialLambda: 0.125 // Exponential decay rate - 1/8m for 8m effective range
   })
   const [isHeatmapGenerated, setIsHeatmapGenerated] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -146,7 +155,7 @@ export function TrichogrammaCanvas() {
     setupCanvas()
   }, [currentMission, setupCanvas])
 
-  const generateHeatmap = async () => {
+  const generateHeatmap = useCallback(async () => {
     console.log('🔥 Generate heatmap button clicked!')
     console.log('Current mission:', currentMission)
     console.log('Canvas ref:', canvasRef.current)
@@ -244,6 +253,9 @@ export function TrichogrammaCanvas() {
       // Store density map data for tooltip
       densityMapRef.current = densityData
       
+      // Store heatmap data in global store for map overlay
+      setHeatmapData(densityData)
+      
       setIsHeatmapGenerated(true)
     } catch (error) {
       console.error('Error generating heatmap:', error)
@@ -251,7 +263,7 @@ export function TrichogrammaCanvas() {
       setIsGenerating(false)
       setGenerationProgress(0)
     }
-  }
+  }, [currentMission, parameters, webgpuSupported, useGPU, setHeatmapData])
 
   const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!densityMapRef.current || !canvasRef.current || !isHeatmapGenerated) return
@@ -323,83 +335,239 @@ export function TrichogrammaCanvas() {
             <Text size="sm" fw={600}>{t('heatmap.parameters')}</Text>
           </Group>
           
+          <Text size="sm" fw={500} mb="xs">{t('heatmap.distributionMethod')}</Text>
+          <Text size="xs" c="dimmed" mb="md">{t('heatmap.distributionMethodDescription')}</Text>
+          
+          <Tabs
+            value={parameters.distributionMethod}
+            onChange={(value) => {
+              // Use type guard to ensure value is a valid DistributionMethod
+              if (isDistributionMethod(value)) {
+                setParameters(prev => ({ ...prev, distributionMethod: value }))
+              }
+            }}
+            keepMounted={false}
+          >
+            <Tabs.List grow>
+              <Tabs.Tab value="gaussian">{t('heatmap.distributionGaussian')}</Tabs.Tab>
+              <Tabs.Tab value="levy-flight">{t('heatmap.distributionLevyFlight')}</Tabs.Tab>
+              <Tabs.Tab value="exponential">{t('heatmap.distributionExponential')}</Tabs.Tab>
+            </Tabs.List>
+
+            <Tabs.Panel value="gaussian" pt="md">
+              <Box mb="md" p="xs" style={{ backgroundColor: '#f1f3f4', borderRadius: '4px' }}>
+                <Text size="xs" c="dimmed">
+                  <strong>{t('heatmap.distributionGaussian')}:</strong> {t('heatmap.distributionGaussianDescription')}
+                </Text>
+              </Box>
+              
+              <Grid>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.sigmaTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.sigma')}
+                      description={t('heatmap.sigmaDescription')}
+                      value={parameters.sigma}
+                      onChange={(value) => setParameters(prev => ({ ...prev, sigma: Number(value) || 5 }))}
+                      disabled={isGenerating}
+                      min={1}
+                      max={50}
+                      step={0.5}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.maxDistanceTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.maxDistance')}
+                      description={t('heatmap.maxDistanceDescription')}
+                      value={parameters.maxDistance}
+                      onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
+                      disabled={isGenerating}
+                      min={5}
+                      max={100}
+                      step={5}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </Grid.Col>
+              </Grid>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="levy-flight" pt="md">
+              <Box mb="md" p="xs" style={{ backgroundColor: '#f1f3f4', borderRadius: '4px' }}>
+                <Text size="xs" c="dimmed">
+                  <strong>{t('heatmap.distributionLevyFlight')}:</strong> {t('heatmap.distributionLevyFlightDescription')}
+                </Text>
+              </Box>
+              
+              <Grid>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.sigmaTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.sigmaScale')}
+                      description={t('heatmap.sigmaScaleDescription')}
+                      value={parameters.sigma}
+                      onChange={(value) => setParameters(prev => ({ ...prev, sigma: Number(value) || 5 }))}
+                      disabled={isGenerating}
+                      min={1}
+                      max={50}
+                      step={0.5}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.levyAlphaTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.levyAlpha')}
+                      description={t('heatmap.levyAlphaDescription')}
+                      value={parameters.levyAlpha}
+                      onChange={(value) => setParameters(prev => ({ ...prev, levyAlpha: Number(value) || 1.8 }))}
+                      disabled={isGenerating}
+                      min={1.0}
+                      max={2.0}
+                      step={0.1}
+                      size="sm"
+                      decimalScale={1}
+                    />
+                  </Tooltip>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.maxDistanceTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.maxDistance')}
+                      description={t('heatmap.maxDistanceDescription')}
+                      value={parameters.maxDistance}
+                      onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
+                      disabled={isGenerating}
+                      min={5}
+                      max={100}
+                      step={5}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </Grid.Col>
+              </Grid>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="exponential" pt="md">
+              <Box mb="md" p="xs" style={{ backgroundColor: '#f1f3f4', borderRadius: '4px' }}>
+                <Text size="xs" c="dimmed">
+                  <strong>{t('heatmap.distributionExponential')}:</strong> {t('heatmap.distributionExponentialDescription')}
+                </Text>
+              </Box>
+              
+              <Grid>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.exponentialLambdaTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.exponentialLambda')}
+                      description={t('heatmap.exponentialLambdaDescription')}
+                      value={parameters.exponentialLambda}
+                      onChange={(value) => setParameters(prev => ({ ...prev, exponentialLambda: Number(value) || 0.125 }))}
+                      disabled={isGenerating}
+                      min={0.05}
+                      max={0.5}
+                      step={0.05}
+                      size="sm"
+                      decimalScale={2}
+                    />
+                  </Tooltip>
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Tooltip
+                    label={t('heatmap.maxDistanceTooltip')}
+                    multiline
+                    withArrow
+                  >
+                    <NumberInput
+                      label={t('heatmap.maxDistance')}
+                      description={t('heatmap.maxDistanceDescription')}
+                      value={parameters.maxDistance}
+                      onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
+                      disabled={isGenerating}
+                      min={5}
+                      max={100}
+                      step={5}
+                      size="sm"
+                    />
+                  </Tooltip>
+                </Grid.Col>
+              </Grid>
+            </Tabs.Panel>
+          </Tabs>
+
+          <Box mt="md">
+            <Text size="sm" fw={500} mb="xs">{t('heatmap.generalParameters')}</Text>
+            <Grid>
+              <Grid.Col span={6}>
+                <Tooltip
+                  label={t('heatmap.insectsPerDropTooltip')}
+                  multiline
+                  withArrow
+                >
+                  <NumberInput
+                    label={t('heatmap.insectsPerDrop')}
+                    description={t('heatmap.insectsPerDropDescription')}
+                    value={parameters.insectsPerDrop}
+                    onChange={(value) => setParameters(prev => ({ ...prev, insectsPerDrop: Number(value) || 1000 }))}
+                    disabled={isGenerating}
+                    min={500}
+                    max={3000}
+                    step={100}
+                    size="sm"
+                  />
+                </Tooltip>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Tooltip
+                  label={t('heatmap.resolutionTooltip')}
+                  multiline
+                  withArrow
+                >
+                  <NumberInput
+                    label={t('heatmap.resolution')}
+                    description={t('heatmap.resolutionDescription')}
+                    value={parameters.resolution}
+                    onChange={(value) => setParameters(prev => ({ ...prev, resolution: Number(value) || 2 }))}
+                    disabled={isGenerating}
+                    min={1}
+                    max={4}
+                    step={1}
+                    size="sm"
+                  />
+                </Tooltip>
+              </Grid.Col>
+            </Grid>
+          </Box>
+
           <Grid>
-            <Grid.Col span={6}>
-              <Tooltip
-                label={t('heatmap.sigmaTooltip')}
-                multiline
-                withArrow
-              >
-                <NumberInput
-                  label={t('heatmap.sigma')}
-                  description={t('heatmap.sigmaDescription')}
-                  value={parameters.sigma}
-                  onChange={(value) => setParameters(prev => ({ ...prev, sigma: Number(value) || 5 }))}
-                  disabled={isGenerating}
-                  min={1}
-                  max={50}
-                  step={0.5}
-                  size="sm"
-                />
-              </Tooltip>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Tooltip
-                label={t('heatmap.maxDistanceTooltip')}
-                multiline
-                withArrow
-              >
-                <NumberInput
-                  label={t('heatmap.maxDistance')}
-                  description={t('heatmap.maxDistanceDescription')}
-                  value={parameters.maxDistance}
-                  onChange={(value) => setParameters(prev => ({ ...prev, maxDistance: Number(value) || 15 }))}
-                  disabled={isGenerating}
-                  min={5}
-                  max={100}
-                  step={5}
-                  size="sm"
-                />
-              </Tooltip>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Tooltip
-                label={t('heatmap.insectsPerDropTooltip')}
-                multiline
-                withArrow
-              >
-                <NumberInput
-                  label={t('heatmap.insectsPerDrop')}
-                  description={t('heatmap.insectsPerDropDescription')}
-                  value={parameters.insectsPerDrop}
-                  onChange={(value) => setParameters(prev => ({ ...prev, insectsPerDrop: Number(value) || 1200 }))}
-                  disabled={isGenerating}
-                  min={100}
-                  max={5000}
-                  step={100}
-                  size="sm"
-                />
-              </Tooltip>
-            </Grid.Col>
-            <Grid.Col span={6}>
-              <Tooltip
-                label={t('heatmap.resolutionTooltip')}
-                multiline
-                withArrow
-              >
-                <NumberInput
-                  label={t('heatmap.resolution')}
-                  description={t('heatmap.resolutionDescription')}
-                  value={parameters.resolution}
-                  onChange={(value) => setParameters(prev => ({ ...prev, resolution: Number(value) || 2 }))}
-                  disabled={isGenerating}
-                  min={1}
-                  max={4}
-                  step={1}
-                  size="sm"
-                />
-              </Tooltip>
-            </Grid.Col>
             <Grid.Col span={12}>
               <Switch
                 label={t('heatmap.gpuAcceleration')}
@@ -440,7 +608,9 @@ export function TrichogrammaCanvas() {
           
           <Group justify="space-between" mt="md">
             <Text size="xs" c="dimmed">
-              σ={parameters.sigma}m, max {parameters.maxDistance}m {t('heatmap.radius')}, {parameters.insectsPerDrop} {t('heatmap.insectsDropShort')}
+              σ={parameters.sigma}m, max {parameters.maxDistance}m {t('heatmap.radius')}, {parameters.insectsPerDrop} {t('heatmap.insectsDropShort')}, {parameters.distributionMethod}
+              {parameters.distributionMethod === 'levy-flight' && `, α=${parameters.levyAlpha}`}
+              {parameters.distributionMethod === 'exponential' && `, λ=${parameters.exponentialLambda}`}
             </Text>
             <Button
               leftSection={<IconChartDots size={16} />}

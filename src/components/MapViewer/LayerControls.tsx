@@ -1,5 +1,5 @@
 import { Paper, Stack, Switch, Text, Group, Divider, Badge, SegmentedControl, Button } from '@mantine/core'
-import { IconDroplet, IconRoute, IconPolygon, IconMap, IconSatellite, IconDownload, IconFile, IconMapPin, IconSettings, IconTarget } from '@tabler/icons-react'
+import { IconDroplet, IconRoute, IconPolygon, IconMap, IconSatellite, IconDownload, IconFile, IconMapPin, IconSettings, IconTarget, IconTrash, IconChartDots } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMissionStore } from '../../stores/missionStore'
@@ -10,7 +10,7 @@ interface LayerControlsProps {
 }
 
 export function LayerControls({ embedded = false }: LayerControlsProps) {
-  const { selectedLayers, toggleLayer, currentMission, tileLayer, setTileLayer, selectedSourceFiles, toggleSourceFile } = useMissionStore()
+  const { selectedLayers, toggleLayer, currentMission, tileLayer, setTileLayer, selectedSourceFiles, toggleSourceFile, removeSourceFile, heatmapData } = useMissionStore()
   const { t } = useTranslation()
   const [isExporting, setIsExporting] = useState(false)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
@@ -148,9 +148,26 @@ export function LayerControls({ embedded = false }: LayerControlsProps) {
               />
             </Group>
           )}
+          
+          {heatmapData && (
+            <Group justify="space-between">
+              <Group gap="xs">
+                <IconChartDots size={16} color="var(--mantine-color-red-5)" />
+                <Text size="xs">{t('map.heatmap')}</Text>
+                <Badge size="xs" variant="light" color="red">
+                  OVERLAY
+                </Badge>
+              </Group>
+              <Switch
+                size="sm"
+                checked={selectedLayers.has('heatmap')}
+                onChange={() => toggleLayer('heatmap')}
+              />
+            </Group>
+          )}
         </Stack>
         
-{currentMission.sourceFiles && (currentMission.isMerged ? currentMission.sourceFiles.length > 1 : currentMission.sourceFiles.length >= 1) && (
+{currentMission.sourceFiles && currentMission.sourceFiles.length >= 1 && (
           <>
             <Divider />
             
@@ -163,15 +180,25 @@ export function LayerControls({ embedded = false }: LayerControlsProps) {
                 const totalCount = dropCount + waypointCount
                 
                 return (
-                  <Group key={sourceFile} justify="space-between">
-                    <Group gap="xs">
+                  <Group key={sourceFile} justify="space-between" wrap="nowrap">
+                    <Group gap="xs" style={{ flex: 1 }} wrap="nowrap">
                       <IconFile size={16} color={`hsl(${(index * 45) % 360}, 70%, 50%)`} />
-                      <Text size="xs" truncate style={{ maxWidth: 120 }}>
+                      <Text size="xs" style={{ flex: 1, minWidth: 0 }}>
                         {sourceFile.replace('.json', '')}
                       </Text>
                       <Badge size="xs" variant="light" color="gray">
                         {totalCount}
                       </Badge>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => removeSourceFile(sourceFile)}
+                        p={2}
+                        title={`Remove ${sourceFile}`}
+                      >
+                        <IconTrash size={10} />
+                      </Button>
                     </Group>
                     <Switch
                       size="sm"
@@ -183,24 +210,37 @@ export function LayerControls({ embedded = false }: LayerControlsProps) {
               })}
               
               {/* Add WDM files if present */}
-              {currentMission.missionSettings && currentMission.missionSettings.map((settings, index) => (
-                <Group key={settings.filename || `wdm-${index}`} justify="space-between">
-                  <Group gap="xs">
-                    <IconSettings size={16} color="var(--mantine-color-green-6)" />
-                    <Text size="xs" truncate style={{ maxWidth: 120 }}>
-                      {settings.filename ? settings.filename.replace('.wdm', '') : `Mission ${index + 1}`}
-                    </Text>
-                    <Badge size="xs" variant="light" color="green">
-                      WDM
-                    </Badge>
+              {currentMission.missionSettings && currentMission.missionSettings.map((settings, index) => {
+                const sourceFileKey = settings.filename || `wdm-${index}`
+                return (
+                  <Group key={sourceFileKey} justify="space-between" wrap="nowrap">
+                    <Group gap="xs" style={{ flex: 1 }} wrap="nowrap">
+                      <IconSettings size={16} color="var(--mantine-color-green-6)" />
+                      <Text size="xs" style={{ flex: 1, minWidth: 0 }}>
+                        {settings.filename ? settings.filename.replace('.wdm', '') : `Mission ${index + 1}`}
+                      </Text>
+                      <Badge size="xs" variant="light" color="green">
+                        WDM
+                      </Badge>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() => removeSourceFile(sourceFileKey)}
+                        p={2}
+                        title={`Remove ${sourceFileKey}`}
+                      >
+                        <IconTrash size={10} />
+                      </Button>
+                    </Group>
+                    <Switch
+                      size="sm"
+                      checked={selectedSourceFiles.has(sourceFileKey)}
+                      onChange={() => toggleSourceFile(sourceFileKey)}
+                    />
                   </Group>
-                  <Switch
-                    size="sm"
-                    checked={selectedSourceFiles.has(settings.filename || `wdm-${index}`)}
-                    onChange={() => toggleSourceFile(settings.filename || `wdm-${index}`)}
-                  />
-                </Group>
-              ))}
+                )
+              })}
             </Stack>
           </>
         )}
