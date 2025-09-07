@@ -2,47 +2,47 @@
  * Heatmap calculation utilities for density visualization
  */
 
-import type { FieldBounds } from './canvasUtils'
-import { 
-  initializeWebGPU, 
-  createHeatmapComputePipeline, 
+import type { FieldBounds } from "./canvasUtils";
+import {
+  initializeWebGPU,
+  createHeatmapComputePipeline,
   createHeatmapBuffers,
-  type HeatmapParamsGPU 
-} from './webgpuUtils'
+  type HeatmapParamsGPU,
+} from "./webgpuUtils";
 
-export type DistributionMethod = 'gaussian' | 'levy-flight' | 'exponential'
+export type DistributionMethod = "gaussian" | "levy-flight" | "exponential";
 
 export interface HeatmapParameters {
-  sigma: number // Standard deviation in meters (for Gaussian)
-  maxDistance: number // Maximum distance in meters
-  insectsPerDrop: number // Insects per drop point
-  resolution: number // Canvas resolution multiplier
-  distributionMethod: DistributionMethod // Distribution method for density calculation
-  
+  sigma: number; // Standard deviation in meters (for Gaussian)
+  maxDistance: number; // Maximum distance in meters
+  insectsPerDrop: number; // Insects per drop point
+  resolution: number; // Canvas resolution multiplier
+  distributionMethod: DistributionMethod; // Distribution method for density calculation
+
   // Distribution-specific parameters
-  levyAlpha?: number // Lévy flight stability parameter (1.0-2.0, default 1.5)
-  exponentialLambda?: number // Exponential decay rate (default 0.2)
+  levyAlpha?: number; // Lévy flight stability parameter (1.0-2.0, default 1.5)
+  exponentialLambda?: number; // Exponential decay rate (default 0.2)
 }
 
 export interface DensityMapData {
-  densityData: Float32Array
-  maxDensity: number
-  canvasWidth: number
-  canvasHeight: number
-  boundedMinLat: number
-  boundedMaxLat: number
-  boundedMinLng: number
-  boundedMaxLng: number
-  boundedLatRange: number
-  boundedLngRange: number
-  pixelsPerMeter: number
-  fieldWidthMeters: number
-  fieldHeightMeters: number
+  densityData: Float32Array;
+  maxDensity: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  boundedMinLat: number;
+  boundedMaxLat: number;
+  boundedMinLng: number;
+  boundedMaxLng: number;
+  boundedLatRange: number;
+  boundedLngRange: number;
+  pixelsPerMeter: number;
+  fieldWidthMeters: number;
+  fieldHeightMeters: number;
 }
 
 export interface DropPoint {
-  latitude: number
-  longitude: number
+  latitude: number;
+  longitude: number;
 }
 
 /**
@@ -51,32 +51,41 @@ export interface DropPoint {
  * @param parameters Heatmap parameters including distribution method
  * @returns Distribution value between 0 and 1
  */
-function calculateDistributionValue(meterDistance: number, parameters: HeatmapParameters): number {
+function calculateDistributionValue(
+  meterDistance: number,
+  parameters: HeatmapParameters,
+): number {
   switch (parameters.distributionMethod) {
-    case 'gaussian':
+    case "gaussian":
       // Standard Gaussian distribution
-      return Math.exp(-(meterDistance * meterDistance) / (2 * parameters.sigma * parameters.sigma))
-    
-    case 'levy-flight': {
+      return Math.exp(
+        -(meterDistance * meterDistance) /
+          (2 * parameters.sigma * parameters.sigma),
+      );
+
+    case "levy-flight": {
       // Lévy stable distribution - proper implementation
-      const alpha = parameters.levyAlpha || 1.8
-      if (meterDistance === 0) return 1.0
-      
-      const scale = parameters.sigma
-      const normalizedDistance = meterDistance / scale
-      
+      const alpha = parameters.levyAlpha || 1.8;
+      if (meterDistance === 0) return 1.0;
+
+      const scale = parameters.sigma;
+      const normalizedDistance = meterDistance / scale;
+
       // Standard Lévy distribution formula
-      return Math.pow(1 + normalizedDistance * normalizedDistance, -alpha / 2)
+      return Math.pow(1 + normalizedDistance * normalizedDistance, -alpha / 2);
     }
-    
-    case 'exponential': {
+
+    case "exponential": {
       // Standard exponential distribution
-      const lambda = parameters.exponentialLambda || 0.125
-      return Math.exp(-lambda * meterDistance)
+      const lambda = parameters.exponentialLambda || 0.125;
+      return Math.exp(-lambda * meterDistance);
     }
-    
+
     default:
-      return Math.exp(-(meterDistance * meterDistance) / (2 * parameters.sigma * parameters.sigma))
+      return Math.exp(
+        -(meterDistance * meterDistance) /
+          (2 * parameters.sigma * parameters.sigma),
+      );
   }
 }
 
@@ -86,11 +95,15 @@ function calculateDistributionValue(meterDistance: number, parameters: HeatmapPa
  * @returns Array of valid drop points
  */
 export function filterValidDropPoints(dropPoints: DropPoint[]): DropPoint[] {
-  return dropPoints.filter(p => 
-    p.latitude !== 0 && p.longitude !== 0 && 
-    p.latitude > -90 && p.latitude < 90 && 
-    p.longitude > -180 && p.longitude < 180
-  )
+  return dropPoints.filter(
+    (p) =>
+      p.latitude !== 0 &&
+      p.longitude !== 0 &&
+      p.latitude > -90 &&
+      p.latitude < 90 &&
+      p.longitude > -180 &&
+      p.longitude < 180,
+  );
 }
 
 /**
@@ -103,31 +116,32 @@ export function filterValidDropPoints(dropPoints: DropPoint[]): DropPoint[] {
 export function calculateMetersToPixels(
   bounds: FieldBounds,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
 ): {
-  fieldWidthMeters: number
-  fieldHeightMeters: number
-  pixelsPerMeterX: number
-  pixelsPerMeterY: number
-  pixelsPerMeter: number
+  fieldWidthMeters: number;
+  fieldHeightMeters: number;
+  pixelsPerMeterX: number;
+  pixelsPerMeterY: number;
+  pixelsPerMeter: number;
 } {
-  const centerLat = (bounds.minLat + bounds.maxLat) / 2
-  const metersPerDegreeLongitude = 111320 * Math.cos(centerLat * Math.PI / 180)
-  
-  const fieldWidthMeters = bounds.boundedLngRange * metersPerDegreeLongitude
-  const fieldHeightMeters = bounds.boundedLatRange * 111320
-  
-  const pixelsPerMeterX = canvasWidth / fieldWidthMeters
-  const pixelsPerMeterY = canvasHeight / fieldHeightMeters
-  const pixelsPerMeter = (pixelsPerMeterX + pixelsPerMeterY) / 2
-  
+  const centerLat = (bounds.minLat + bounds.maxLat) / 2;
+  const metersPerDegreeLongitude =
+    111320 * Math.cos((centerLat * Math.PI) / 180);
+
+  const fieldWidthMeters = bounds.boundedLngRange * metersPerDegreeLongitude;
+  const fieldHeightMeters = bounds.boundedLatRange * 111320;
+
+  const pixelsPerMeterX = canvasWidth / fieldWidthMeters;
+  const pixelsPerMeterY = canvasHeight / fieldHeightMeters;
+  const pixelsPerMeter = (pixelsPerMeterX + pixelsPerMeterY) / 2;
+
   return {
     fieldWidthMeters,
     fieldHeightMeters,
     pixelsPerMeterX,
     pixelsPerMeterY,
-    pixelsPerMeter
-  }
+    pixelsPerMeter,
+  };
 }
 
 /**
@@ -146,60 +160,68 @@ export async function calculateDensityMapAsync(
   canvasWidth: number,
   canvasHeight: number,
   parameters: HeatmapParameters,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
 ): Promise<DensityMapData> {
-  const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } = calculateMetersToPixels(
-    bounds, 
-    canvasWidth, 
-    canvasHeight
-  )
-  
+  const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } =
+    calculateMetersToPixels(bounds, canvasWidth, canvasHeight);
+
   // Create density map
-  const densityMap = new Float32Array(canvasWidth * canvasHeight)
-  let maxDensity = 0
-  
+  const densityMap = new Float32Array(canvasWidth * canvasHeight);
+  let maxDensity = 0;
+
   // Process rows in chunks to allow UI updates
-  const ROWS_PER_CHUNK = Math.max(1, Math.floor(canvasHeight / 100)) // Process ~1% of rows per chunk
-  
+  const ROWS_PER_CHUNK = Math.max(1, Math.floor(canvasHeight / 100)); // Process ~1% of rows per chunk
+
   for (let startY = 0; startY < canvasHeight; startY += ROWS_PER_CHUNK) {
-    const endY = Math.min(startY + ROWS_PER_CHUNK, canvasHeight)
-    
+    const endY = Math.min(startY + ROWS_PER_CHUNK, canvasHeight);
+
     // Process chunk of rows
     for (let y = startY; y < endY; y++) {
       for (let x = 0; x < canvasWidth; x++) {
-        let totalDensity = 0
-        
+        let totalDensity = 0;
+
         // Check contribution from each drop point
         dropPoints.forEach((dropPoint) => {
-          const centerX = ((dropPoint.longitude - bounds.boundedMinLng) / bounds.boundedLngRange) * canvasWidth
-          const centerY = ((bounds.boundedMaxLat - dropPoint.latitude) / bounds.boundedLatRange) * canvasHeight
-          
+          const centerX =
+            ((dropPoint.longitude - bounds.boundedMinLng) /
+              bounds.boundedLngRange) *
+            canvasWidth;
+          const centerY =
+            ((bounds.boundedMaxLat - dropPoint.latitude) /
+              bounds.boundedLatRange) *
+            canvasHeight;
+
           // Calculate distance from this pixel to drop point center
-          const pixelDistance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
-          const meterDistance = pixelDistance / pixelsPerMeter
-          
+          const pixelDistance = Math.sqrt(
+            (x - centerX) ** 2 + (y - centerY) ** 2,
+          );
+          const meterDistance = pixelDistance / pixelsPerMeter;
+
           // Only calculate if within max distance range
           if (meterDistance <= parameters.maxDistance) {
             // Calculate density contribution using selected distribution method
-            const distributionValue = calculateDistributionValue(meterDistance, parameters)
-            totalDensity += distributionValue
+            const distributionValue = calculateDistributionValue(
+              meterDistance,
+              parameters,
+            );
+            totalDensity += distributionValue;
           }
-        })
-        
-        densityMap[y * canvasWidth + x] = totalDensity
-        maxDensity = Math.max(maxDensity, totalDensity)
+        });
+
+        densityMap[y * canvasWidth + x] = totalDensity;
+        maxDensity = Math.max(maxDensity, totalDensity);
       }
     }
-    
+
     // Report progress and yield control to browser
     if (onProgress) {
-      onProgress(endY, canvasHeight)
+      onProgress(endY, canvasHeight);
     }
-    
+
     // Yield control back to the browser for UI updates
-    await new Promise(resolve => requestAnimationFrame(resolve))
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   }
-  
+
   return {
     densityData: densityMap,
     maxDensity,
@@ -213,8 +235,8 @@ export async function calculateDensityMapAsync(
     boundedLngRange: bounds.boundedLngRange,
     pixelsPerMeter,
     fieldWidthMeters,
-    fieldHeightMeters
-  }
+    fieldHeightMeters,
+  };
 }
 
 /**
@@ -231,45 +253,53 @@ export function calculateDensityMap(
   bounds: FieldBounds,
   canvasWidth: number,
   canvasHeight: number,
-  parameters: HeatmapParameters
+  parameters: HeatmapParameters,
 ): DensityMapData {
-  const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } = calculateMetersToPixels(
-    bounds, 
-    canvasWidth, 
-    canvasHeight
-  )
-  
+  const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } =
+    calculateMetersToPixels(bounds, canvasWidth, canvasHeight);
+
   // Create density map
-  const densityMap = new Float32Array(canvasWidth * canvasHeight)
-  let maxDensity = 0
-  
+  const densityMap = new Float32Array(canvasWidth * canvasHeight);
+  let maxDensity = 0;
+
   // For each pixel, calculate cumulative density from all drop points
   for (let y = 0; y < canvasHeight; y++) {
     for (let x = 0; x < canvasWidth; x++) {
-      let totalDensity = 0
-      
+      let totalDensity = 0;
+
       // Check contribution from each drop point
       dropPoints.forEach((dropPoint) => {
-        const centerX = ((dropPoint.longitude - bounds.boundedMinLng) / bounds.boundedLngRange) * canvasWidth
-        const centerY = ((bounds.boundedMaxLat - dropPoint.latitude) / bounds.boundedLatRange) * canvasHeight
-        
+        const centerX =
+          ((dropPoint.longitude - bounds.boundedMinLng) /
+            bounds.boundedLngRange) *
+          canvasWidth;
+        const centerY =
+          ((bounds.boundedMaxLat - dropPoint.latitude) /
+            bounds.boundedLatRange) *
+          canvasHeight;
+
         // Calculate distance from this pixel to drop point center
-        const pixelDistance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
-        const meterDistance = pixelDistance / pixelsPerMeter
-        
+        const pixelDistance = Math.sqrt(
+          (x - centerX) ** 2 + (y - centerY) ** 2,
+        );
+        const meterDistance = pixelDistance / pixelsPerMeter;
+
         // Only calculate if within max distance range
         if (meterDistance <= parameters.maxDistance) {
           // Calculate density contribution using selected distribution method
-          const distributionValue = calculateDistributionValue(meterDistance, parameters)
-          totalDensity += distributionValue
+          const distributionValue = calculateDistributionValue(
+            meterDistance,
+            parameters,
+          );
+          totalDensity += distributionValue;
         }
-      })
-      
-      densityMap[y * canvasWidth + x] = totalDensity
-      maxDensity = Math.max(maxDensity, totalDensity)
+      });
+
+      densityMap[y * canvasWidth + x] = totalDensity;
+      maxDensity = Math.max(maxDensity, totalDensity);
     }
   }
-  
+
   return {
     densityData: densityMap,
     maxDensity,
@@ -283,8 +313,8 @@ export function calculateDensityMap(
     boundedLngRange: bounds.boundedLngRange,
     pixelsPerMeter,
     fieldWidthMeters,
-    fieldHeightMeters
-  }
+    fieldHeightMeters,
+  };
 }
 
 /**
@@ -297,15 +327,18 @@ export function calculateDensityMap(
 export function canvasToGPS(
   canvasX: number,
   canvasY: number,
-  densityData: DensityMapData
-): { lat: number, lng: number } {
-  const lngProgress = canvasX / densityData.canvasWidth
-  const latProgress = (densityData.canvasHeight - canvasY) / densityData.canvasHeight
-  
-  const gpsLng = densityData.boundedMinLng + (lngProgress * densityData.boundedLngRange)
-  const gpsLat = densityData.boundedMinLat + (latProgress * densityData.boundedLatRange)
-  
-  return { lat: gpsLat, lng: gpsLng }
+  densityData: DensityMapData,
+): { lat: number; lng: number } {
+  const lngProgress = canvasX / densityData.canvasWidth;
+  const latProgress =
+    (densityData.canvasHeight - canvasY) / densityData.canvasHeight;
+
+  const gpsLng =
+    densityData.boundedMinLng + lngProgress * densityData.boundedLngRange;
+  const gpsLat =
+    densityData.boundedMinLat + latProgress * densityData.boundedLatRange;
+
+  return { lat: gpsLat, lng: gpsLng };
 }
 
 /**
@@ -320,22 +353,22 @@ export function getDensityAtPoint(
   canvasX: number,
   canvasY: number,
   densityData: DensityMapData,
-  insectsPerDrop: number
+  insectsPerDrop: number,
 ): {
-  density: number
-  normalizedDensity: number
-  approximateInsects: number
+  density: number;
+  normalizedDensity: number;
+  approximateInsects: number;
 } {
-  const pixelIndex = canvasY * densityData.canvasWidth + canvasX
-  const density = densityData.densityData[pixelIndex] || 0
-  const normalizedDensity = density / densityData.maxDensity
-  const approximateInsects = Math.round(density * insectsPerDrop)
-  
+  const pixelIndex = canvasY * densityData.canvasWidth + canvasX;
+  const density = densityData.densityData[pixelIndex] || 0;
+  const normalizedDensity = density / densityData.maxDensity;
+  const approximateInsects = Math.round(density * insectsPerDrop);
+
   return {
     density,
     normalizedDensity,
-    approximateInsects
-  }
+    approximateInsects,
+  };
 }
 
 /**
@@ -352,62 +385,69 @@ export function calculateLocalDensityPerArea(
   canvasY: number,
   densityData: DensityMapData,
   insectsPerDrop: number,
-  sampleAreaMeters: number = 1
+  sampleAreaMeters: number = 1,
 ): {
-  insectsPerSquareMeter: number
-  sampleAreaMeters: number
-  sampledPixels: number
+  insectsPerSquareMeter: number;
+  sampleAreaMeters: number;
+  sampledPixels: number;
 } {
   // Convert sample area to pixel radius
   // For circular area: area = π * r², so r = sqrt(area / π)
-  const sampleRadiusMeters = Math.sqrt(sampleAreaMeters / Math.PI)
-  const sampleRadiusPixels = Math.ceil(sampleRadiusMeters * densityData.pixelsPerMeter)
-  
-  let totalDensity = 0
-  let sampledPixels = 0
-  
+  const sampleRadiusMeters = Math.sqrt(sampleAreaMeters / Math.PI);
+  const sampleRadiusPixels = Math.ceil(
+    sampleRadiusMeters * densityData.pixelsPerMeter,
+  );
+
+  let totalDensity = 0;
+  let sampledPixels = 0;
+
   // Sample pixels within the circular area
   for (let dy = -sampleRadiusPixels; dy <= sampleRadiusPixels; dy++) {
     for (let dx = -sampleRadiusPixels; dx <= sampleRadiusPixels; dx++) {
-      const pixelDistance = Math.sqrt(dx * dx + dy * dy)
-      
+      const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+
       // Only sample pixels within the circular radius
       if (pixelDistance <= sampleRadiusPixels) {
-        const sampleX = canvasX + dx
-        const sampleY = canvasY + dy
-        
+        const sampleX = canvasX + dx;
+        const sampleY = canvasY + dy;
+
         // Check bounds
-        if (sampleX >= 0 && sampleX < densityData.canvasWidth && 
-            sampleY >= 0 && sampleY < densityData.canvasHeight) {
-          const pixelIndex = sampleY * densityData.canvasWidth + sampleX
-          totalDensity += densityData.densityData[pixelIndex] || 0
-          sampledPixels++
+        if (
+          sampleX >= 0 &&
+          sampleX < densityData.canvasWidth &&
+          sampleY >= 0 &&
+          sampleY < densityData.canvasHeight
+        ) {
+          const pixelIndex = sampleY * densityData.canvasWidth + sampleX;
+          totalDensity += densityData.densityData[pixelIndex] || 0;
+          sampledPixels++;
         }
       }
     }
   }
-  
+
   if (sampledPixels === 0) {
     return {
       insectsPerSquareMeter: 0,
       sampleAreaMeters,
-      sampledPixels: 0
-    }
+      sampledPixels: 0,
+    };
   }
-  
+
   // Calculate average density in the sample area
-  const averageDensity = totalDensity / sampledPixels
-  
+  const averageDensity = totalDensity / sampledPixels;
+
   // Convert to insects per square meter
   // averageDensity represents cumulative Gaussian contributions
   // Multiply by insectsPerDrop to get actual insect count, then divide by area
-  const insectsPerSquareMeter = (averageDensity * insectsPerDrop) / sampleAreaMeters
-  
+  const insectsPerSquareMeter =
+    (averageDensity * insectsPerDrop) / sampleAreaMeters;
+
   return {
     insectsPerSquareMeter,
     sampleAreaMeters,
-    sampledPixels
-  }
+    sampledPixels,
+  };
 }
 
 // WGSL Shader code for GPU computation
@@ -501,7 +541,7 @@ fn computeDensity(@builtin(global_invocation_id) global_id: vec3u) {
   
   densityMap[pixelIndex] = totalDensity;
 }
-`
+`;
 
 /**
  * Calculate cumulative density map using GPU acceleration (WebGPU)
@@ -520,32 +560,37 @@ export async function calculateDensityMapGPU(
   canvasWidth: number,
   canvasHeight: number,
   parameters: HeatmapParameters,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  webGPUAdapter?: GPUAdapter | null,
 ): Promise<DensityMapData> {
   // Initialize WebGPU
-  const webgpu = await initializeWebGPU()
-  
+  const webgpu = await initializeWebGPU(webGPUAdapter);
+
   if (!webgpu) {
-    console.log('WebGPU not available, falling back to CPU')
-    return calculateDensityMapAsync(dropPoints, bounds, canvasWidth, canvasHeight, parameters, onProgress)
+    console.log("WebGPU not available, falling back to CPU");
+    return calculateDensityMapAsync(
+      dropPoints,
+      bounds,
+      canvasWidth,
+      canvasHeight,
+      parameters,
+      onProgress,
+    );
   }
 
   try {
-    const { device } = webgpu
-    
+    const { device } = webgpu;
+
     // Calculate meters to pixels conversion
-    const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } = calculateMetersToPixels(
-      bounds, 
-      canvasWidth, 
-      canvasHeight
-    )
+    const { fieldWidthMeters, fieldHeightMeters, pixelsPerMeter } =
+      calculateMetersToPixels(bounds, canvasWidth, canvasHeight);
 
     // Prepare GPU parameters
     const distributionMethodMap = {
-      'gaussian': 0,
-      'levy-flight': 1,
-      'exponential': 2
-    } as const
+      gaussian: 0,
+      "levy-flight": 1,
+      exponential: 2,
+    } as const;
 
     const gpuParams: HeatmapParamsGPU = {
       canvasWidth,
@@ -563,14 +608,14 @@ export async function calculateDensityMapGPU(
       boundedLngRange: bounds.boundedLngRange,
       distributionMethod: distributionMethodMap[parameters.distributionMethod],
       levyAlpha: parameters.levyAlpha || 1.8,
-      exponentialLambda: parameters.exponentialLambda || 0.125
-    }
+      exponentialLambda: parameters.exponentialLambda || 0.125,
+    };
 
     // Create compute pipeline
-    const pipeline = createHeatmapComputePipeline(device, HEATMAP_SHADER_CODE)
+    const pipeline = createHeatmapComputePipeline(device, HEATMAP_SHADER_CODE);
 
     // Create buffers
-    const buffers = createHeatmapBuffers(device, dropPoints, gpuParams)
+    const buffers = createHeatmapBuffers(device, dropPoints, gpuParams);
 
     // Create bind group
     const bindGroup = device.createBindGroup({
@@ -578,55 +623,61 @@ export async function calculateDensityMapGPU(
       entries: [
         { binding: 0, resource: { buffer: buffers.dropPointBuffer } },
         { binding: 1, resource: { buffer: buffers.densityMapBuffer } },
-        { binding: 2, resource: { buffer: buffers.paramsBuffer } }
-      ]
-    })
+        { binding: 2, resource: { buffer: buffers.paramsBuffer } },
+      ],
+    });
 
     // Dispatch compute shader
-    const commandEncoder = device.createCommandEncoder({ label: 'Heatmap Compute' })
-    const computePass = commandEncoder.beginComputePass({ label: 'Density Calculation' })
-    
-    computePass.setPipeline(pipeline)
-    computePass.setBindGroup(0, bindGroup)
-    
+    const commandEncoder = device.createCommandEncoder({
+      label: "Heatmap Compute",
+    });
+    const computePass = commandEncoder.beginComputePass({
+      label: "Density Calculation",
+    });
+
+    computePass.setPipeline(pipeline);
+    computePass.setBindGroup(0, bindGroup);
+
     // Calculate workgroup dispatches (16x16 workgroup size)
-    const workgroupsX = Math.ceil(canvasWidth / 16)
-    const workgroupsY = Math.ceil(canvasHeight / 16)
-    computePass.dispatchWorkgroups(workgroupsX, workgroupsY)
-    computePass.end()
+    const workgroupsX = Math.ceil(canvasWidth / 16);
+    const workgroupsY = Math.ceil(canvasHeight / 16);
+    computePass.dispatchWorkgroups(workgroupsX, workgroupsY);
+    computePass.end();
 
     // Copy result to read buffer
     commandEncoder.copyBufferToBuffer(
-      buffers.densityMapBuffer, 0,
-      buffers.readBuffer, 0,
-      buffers.densityMapBuffer.size
-    )
+      buffers.densityMapBuffer,
+      0,
+      buffers.readBuffer,
+      0,
+      buffers.densityMapBuffer.size,
+    );
 
     // Submit commands and wait for completion
-    const commandBuffer = commandEncoder.finish()
-    device.queue.submit([commandBuffer])
+    const commandBuffer = commandEncoder.finish();
+    device.queue.submit([commandBuffer]);
 
     // Read results back to CPU
-    await buffers.readBuffer.mapAsync(GPUMapMode.READ)
-    const resultArrayBuffer = buffers.readBuffer.getMappedRange()
-    const resultData = new Float32Array(resultArrayBuffer.slice(0)) // Copy data
-    buffers.readBuffer.unmap()
+    await buffers.readBuffer.mapAsync(GPUMapMode.READ);
+    const resultArrayBuffer = buffers.readBuffer.getMappedRange();
+    const resultData = new Float32Array(resultArrayBuffer.slice(0)); // Copy data
+    buffers.readBuffer.unmap();
 
     // Find maximum density for normalization
-    let maxDensity = 0
+    let maxDensity = 0;
     for (const density of resultData) {
-      maxDensity = Math.max(maxDensity, density)
+      maxDensity = Math.max(maxDensity, density);
     }
 
     // Cleanup GPU resources
-    buffers.dropPointBuffer.destroy()
-    buffers.paramsBuffer.destroy()
-    buffers.densityMapBuffer.destroy()
-    buffers.readBuffer.destroy()
+    buffers.dropPointBuffer.destroy();
+    buffers.paramsBuffer.destroy();
+    buffers.densityMapBuffer.destroy();
+    buffers.readBuffer.destroy();
 
     // Report completion
     if (onProgress) {
-      onProgress(1, 1) // 100% complete
+      onProgress(1, 1); // 100% complete
     }
 
     // GPU computation completed successfully
@@ -644,11 +695,17 @@ export async function calculateDensityMapGPU(
       boundedLngRange: bounds.boundedLngRange,
       pixelsPerMeter,
       fieldWidthMeters,
-      fieldHeightMeters
-    }
-
+      fieldHeightMeters,
+    };
   } catch (error) {
-    console.error('GPU calculation failed, falling back to CPU:', error)
-    return calculateDensityMapAsync(dropPoints, bounds, canvasWidth, canvasHeight, parameters, onProgress)
+    console.error("GPU calculation failed, falling back to CPU:", error);
+    return calculateDensityMapAsync(
+      dropPoints,
+      bounds,
+      canvasWidth,
+      canvasHeight,
+      parameters,
+      onProgress,
+    );
   }
 }

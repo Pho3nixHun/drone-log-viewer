@@ -1,175 +1,209 @@
-import { useState, useRef } from 'react'
-import { FileButton, Button, Text, Paper, Group, Stack, Alert, Loader, Divider, Badge } from '@mantine/core'
-import { IconUpload, IconFile, IconAlertCircle, IconSettings, IconX, IconCheck } from '@tabler/icons-react'
-import { useTranslation } from 'react-i18next'
-import { useMissionStore } from '../../stores/missionStore'
+import { useState, useRef } from "react";
+import {
+  FileButton,
+  Button,
+  Text,
+  Paper,
+  Group,
+  Stack,
+  Alert,
+  Loader,
+  Divider,
+  Badge,
+} from "@mantine/core";
+import {
+  IconUpload,
+  IconFile,
+  IconAlertCircle,
+  IconSettings,
+  IconX,
+  IconCheck,
+} from "@tabler/icons-react";
+import { useTranslation } from "react-i18next";
+import { useMissionStore } from "@/stores/missionStore";
 
 export function FileUploader() {
-  const [dragOver, setDragOver] = useState(false)
-  const [selectedLogFiles, setSelectedLogFiles] = useState<File[]>([])
-  const [selectedMissionFiles, setSelectedMissionFiles] = useState<File[]>([])
-  const resetRef = useRef<() => void>(null)
-  const missionResetRef = useRef<() => void>(null)
-  const addMoreLogRef = useRef<() => void>(null)
-  const { t } = useTranslation()
-  
-  const { loadMission, loadMissionSettings, isLoading, error, clearError } = useMissionStore()
+  const [dragOver, setDragOver] = useState(false);
+  const [selectedLogFiles, setSelectedLogFiles] = useState<File[]>([]);
+  const [selectedMissionFiles, setSelectedMissionFiles] = useState<File[]>([]);
+  const resetRef = useRef<() => void>(null);
+  const missionResetRef = useRef<() => void>(null);
+  const addMoreLogRef = useRef<() => void>(null);
+  const { t } = useTranslation();
+
+  const { loadMission, loadMissionSettings, isLoading, error, clearError } =
+    useMissionStore();
 
   const handleLogFilesSelect = (files: File | File[] | null) => {
-    const fileArray = files ? (Array.isArray(files) ? files : [files]) : []
-    
+    const fileArray = files ? (Array.isArray(files) ? files : [files]) : [];
+
     // Separate JSON and WDM files
-    const jsonFiles = fileArray.filter(file => file.name.endsWith('.json'))
-    const wdmFiles = fileArray.filter(file => file.name.endsWith('.wdm'))
-    
-    setSelectedLogFiles(jsonFiles)
-    
+    const jsonFiles = fileArray.filter((file) => file.name.endsWith(".json"));
+    const wdmFiles = fileArray.filter((file) => file.name.endsWith(".wdm"));
+
+    setSelectedLogFiles(jsonFiles);
+
     // If WDM files are selected, set them as mission files
     if (wdmFiles.length > 0) {
-      setSelectedMissionFiles(wdmFiles)
+      setSelectedMissionFiles(wdmFiles);
     }
-  }
+  };
 
   const handleAddMoreLogFiles = (files: File | File[] | null) => {
-    const fileArray = files ? (Array.isArray(files) ? files : [files]) : []
-    
+    const fileArray = files ? (Array.isArray(files) ? files : [files]) : [];
+
     // Only process JSON files for log files
-    const jsonFiles = fileArray.filter(file => file.name.endsWith('.json'))
-    
+    const jsonFiles = fileArray.filter((file) => file.name.endsWith(".json"));
+
     // Filter out duplicates by name
-    const newFiles = jsonFiles.filter(newFile => 
-      !selectedLogFiles.some(existingFile => existingFile.name === newFile.name)
-    )
-    
+    const newFiles = jsonFiles.filter(
+      (newFile) =>
+        !selectedLogFiles.some(
+          (existingFile) => existingFile.name === newFile.name,
+        ),
+    );
+
     if (newFiles.length > 0) {
-      setSelectedLogFiles(prev => [...prev, ...newFiles])
+      setSelectedLogFiles((prev) => [...prev, ...newFiles]);
     }
-  }
+  };
 
   const handleMissionFileSelect = (files: File | File[] | null) => {
-    const fileArray = files ? (Array.isArray(files) ? files : [files]) : []
-    const wdmFiles = fileArray.filter(file => file.name.endsWith('.wdm'))
-    
+    const fileArray = files ? (Array.isArray(files) ? files : [files]) : [];
+    const wdmFiles = fileArray.filter((file) => file.name.endsWith(".wdm"));
+
     if (selectedMissionFiles.length === 0) {
       // If no files selected yet, replace
-      setSelectedMissionFiles(wdmFiles)
+      setSelectedMissionFiles(wdmFiles);
     } else {
       // If files already selected, append (avoiding duplicates)
-      const newFiles = wdmFiles.filter(newFile => 
-        !selectedMissionFiles.some(existingFile => existingFile.name === newFile.name)
-      )
+      const newFiles = wdmFiles.filter(
+        (newFile) =>
+          !selectedMissionFiles.some(
+            (existingFile) => existingFile.name === newFile.name,
+          ),
+      );
       if (newFiles.length > 0) {
-        setSelectedMissionFiles(prev => [...prev, ...newFiles])
+        setSelectedMissionFiles((prev) => [...prev, ...newFiles]);
       }
     }
-  }
-
+  };
 
   const handleRemoveLogFile = (indexToRemove: number) => {
-    setSelectedLogFiles(prev => prev.filter((_, index) => index !== indexToRemove))
-  }
+    setSelectedLogFiles((prev) =>
+      prev.filter((_, index) => index !== indexToRemove),
+    );
+  };
 
   const handleRemoveMissionFile = (indexToRemove: number) => {
-    setSelectedMissionFiles(prev => prev.filter((_, index) => index !== indexToRemove))
-  }
+    setSelectedMissionFiles((prev) =>
+      prev.filter((_, index) => index !== indexToRemove),
+    );
+  };
 
   const handleLoadFiles = async () => {
-    if (selectedLogFiles.length === 0) return
-    
-    clearError()
-    
+    if (selectedLogFiles.length === 0) return;
+
+    clearError();
+
     // Load mission data first
-    await loadMission(selectedLogFiles)
-    
+    await loadMission(selectedLogFiles);
+
     // If mission files are selected, load them after the mission data
     if (selectedMissionFiles.length > 0) {
-      await loadMissionSettings(selectedMissionFiles)
+      await loadMissionSettings(selectedMissionFiles);
     }
-    
+
     // Reset form
-    setSelectedLogFiles([])
-    setSelectedMissionFiles([])
-    resetRef.current?.()
-    missionResetRef.current?.()
-    addMoreLogRef.current?.()
-  }
+    setSelectedLogFiles([]);
+    setSelectedMissionFiles([]);
+    resetRef.current?.();
+    missionResetRef.current?.();
+    addMoreLogRef.current?.();
+  };
 
   const handleClearSelection = () => {
-    setSelectedLogFiles([])
-    setSelectedMissionFiles([])
-    resetRef.current?.()
-    missionResetRef.current?.()
-    addMoreLogRef.current?.()
-    clearError()
-  }
+    setSelectedLogFiles([]);
+    setSelectedMissionFiles([]);
+    resetRef.current?.();
+    missionResetRef.current?.();
+    addMoreLogRef.current?.();
+    clearError();
+  };
 
   const handleDragOver = (event: React.DragEvent) => {
-    event.preventDefault()
-    setDragOver(true)
-  }
+    event.preventDefault();
+    setDragOver(true);
+  };
 
   const handleDragLeave = (event: React.DragEvent) => {
-    event.preventDefault()
-    setDragOver(false)
-  }
+    event.preventDefault();
+    setDragOver(false);
+  };
 
   const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault()
-    setDragOver(false)
-    
-    const files = Array.from(event.dataTransfer.files)
-    const jsonFiles = files.filter(file => file.name.endsWith('.json'))
-    const wdmFiles = files.filter(file => file.name.endsWith('.wdm'))
-    
+    event.preventDefault();
+    setDragOver(false);
+
+    const files = Array.from(event.dataTransfer.files);
+    const jsonFiles = files.filter((file) => file.name.endsWith(".json"));
+    const wdmFiles = files.filter((file) => file.name.endsWith(".wdm"));
+
     if (jsonFiles.length > 0) {
       if (selectedLogFiles.length === 0) {
-        setSelectedLogFiles(jsonFiles)
+        setSelectedLogFiles(jsonFiles);
       } else {
         // Append new files, avoiding duplicates
-        const newFiles = jsonFiles.filter(newFile => 
-          !selectedLogFiles.some(existingFile => existingFile.name === newFile.name)
-        )
+        const newFiles = jsonFiles.filter(
+          (newFile) =>
+            !selectedLogFiles.some(
+              (existingFile) => existingFile.name === newFile.name,
+            ),
+        );
         if (newFiles.length > 0) {
-          setSelectedLogFiles(prev => [...prev, ...newFiles])
+          setSelectedLogFiles((prev) => [...prev, ...newFiles]);
         }
       }
     }
-    
+
     if (wdmFiles.length > 0) {
       if (selectedMissionFiles.length === 0) {
-        setSelectedMissionFiles(wdmFiles)
+        setSelectedMissionFiles(wdmFiles);
       } else {
         // Append new files, avoiding duplicates
-        const newFiles = wdmFiles.filter(newFile => 
-          !selectedMissionFiles.some(existingFile => existingFile.name === newFile.name)
-        )
+        const newFiles = wdmFiles.filter(
+          (newFile) =>
+            !selectedMissionFiles.some(
+              (existingFile) => existingFile.name === newFile.name,
+            ),
+        );
         if (newFiles.length > 0) {
-          setSelectedMissionFiles(prev => [...prev, ...newFiles])
+          setSelectedMissionFiles((prev) => [...prev, ...newFiles]);
         }
       }
     }
-  }
+  };
 
   return (
     <Stack gap="md">
       {error && (
-        <Alert 
-          icon={<IconAlertCircle size={16} />} 
+        <Alert
+          icon={<IconAlertCircle size={16} />}
           color="red"
-          title={t('upload.error')}
+          title={t("upload.error")}
           onClose={clearError}
           withCloseButton
         >
           {error}
         </Alert>
       )}
-      
-{isLoading ? (
+
+      {isLoading ? (
         <Paper p="xl" withBorder>
           <Stack align="center" gap="md">
             <Loader size="lg" />
             <Text size="lg" fw={500}>
-              {t('upload.processing')}
+              {t("upload.processing")}
             </Text>
             <Text size="sm" c="dimmed">
               This may take a moment for large files
@@ -180,21 +214,25 @@ export function FileUploader() {
         <Paper p="lg" withBorder>
           <Stack gap="md">
             <Group justify="space-between" align="flex-start">
-              <Text size="lg" fw={600}>{t('upload.title')}</Text>
+              <Text size="lg" fw={600}>
+                {t("upload.title")}
+              </Text>
               <Button
                 variant="subtle"
                 size="xs"
                 leftSection={<IconX size={14} />}
                 onClick={handleClearSelection}
               >
-{t('upload.clear')}
+                {t("upload.clear")}
               </Button>
             </Group>
 
             {/* Selected Log Files */}
             <Stack gap="xs">
               <Group justify="space-between" align="center">
-                <Text size="sm" fw={500}>Drone Log Files:</Text>
+                <Text size="sm" fw={500}>
+                  Drone Log Files:
+                </Text>
                 <FileButton
                   resetRef={addMoreLogRef}
                   onChange={handleAddMoreLogFiles}
@@ -208,7 +246,7 @@ export function FileUploader() {
                       variant="light"
                       leftSection={<IconFile size={14} />}
                     >
-{t('upload.addMore')}
+                      {t("upload.addMore")}
                     </Button>
                   )}
                 </FileButton>
@@ -240,7 +278,9 @@ export function FileUploader() {
             {/* Mission File Section */}
             <Stack gap="xs">
               <Group justify="space-between" align="center">
-                <Text size="sm" fw={500}>{t('upload.missionSettings')}</Text>
+                <Text size="sm" fw={500}>
+                  {t("upload.missionSettings")}
+                </Text>
                 <FileButton
                   resetRef={missionResetRef}
                   onChange={handleMissionFileSelect}
@@ -254,7 +294,9 @@ export function FileUploader() {
                       variant="light"
                       leftSection={<IconSettings size={14} />}
                     >
-{selectedMissionFiles.length === 0 ? t('upload.browsewdm') : t('upload.addMorewdm')}
+                      {selectedMissionFiles.length === 0
+                        ? t("upload.browsewdm")
+                        : t("upload.addMorewdm")}
                     </Button>
                   )}
                 </FileButton>
@@ -264,7 +306,10 @@ export function FileUploader() {
                 <Stack gap="xs">
                   {selectedMissionFiles.map((file, index) => (
                     <Group key={index} gap="xs">
-                      <IconSettings size={16} color="var(--mantine-color-green-5)" />
+                      <IconSettings
+                        size={16}
+                        color="var(--mantine-color-green-5)"
+                      />
                       <Text size="sm" truncate style={{ flex: 1 }}>
                         {file.name}
                       </Text>
@@ -285,7 +330,7 @@ export function FileUploader() {
                 </Stack>
               ) : (
                 <Text size="xs" c="dimmed">
-{t('upload.missionFilesDescription')}
+                  {t("upload.missionFilesDescription")}
                 </Text>
               )}
             </Stack>
@@ -300,7 +345,7 @@ export function FileUploader() {
                 size="md"
                 variant="filled"
               >
-                {t('upload.loadMissionData')}
+                {t("upload.loadMissionData")}
               </Button>
             </Group>
           </Stack>
@@ -310,12 +355,16 @@ export function FileUploader() {
           p="xl"
           withBorder
           style={{
-            borderStyle: 'dashed',
+            borderStyle: "dashed",
             borderWidth: 2,
-            borderColor: dragOver ? 'var(--mantine-color-blue-5)' : 'var(--mantine-color-gray-4)',
-            backgroundColor: dragOver ? 'var(--mantine-color-blue-0)' : 'transparent',
-            transition: 'all 0.2s ease',
-            cursor: 'pointer'
+            borderColor: dragOver
+              ? "var(--mantine-color-blue-5)"
+              : "var(--mantine-color-gray-4)",
+            backgroundColor: dragOver
+              ? "var(--mantine-color-blue-0)"
+              : "transparent",
+            transition: "all 0.2s ease",
+            cursor: "pointer",
           }}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -325,13 +374,13 @@ export function FileUploader() {
             <IconUpload size={48} color="var(--mantine-color-blue-5)" />
             <Stack align="center" gap="xs">
               <Text size="lg" fw={500}>
-                {t('upload.title')}
+                {t("upload.title")}
               </Text>
               <Text size="sm" c="dimmed" ta="center">
-                {t('upload.dragDrop')}
+                {t("upload.dragDrop")}
               </Text>
             </Stack>
-            
+
             <Group>
               <FileButton
                 resetRef={resetRef}
@@ -346,18 +395,18 @@ export function FileUploader() {
                     variant="filled"
                     size="md"
                   >
-                    {t('upload.button')}
+                    {t("upload.button")}
                   </Button>
                 )}
               </FileButton>
             </Group>
-            
+
             <Text size="xs" c="dimmed">
-{t('upload.description')} {t('upload.descriptionExtended')}
+              {t("upload.description")} {t("upload.descriptionExtended")}
             </Text>
           </Stack>
         </Paper>
       )}
     </Stack>
-  )
+  );
 }

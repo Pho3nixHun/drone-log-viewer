@@ -1,9 +1,11 @@
 # Drone Log Visualization Web App - Implementation Plan
 
 ## Project Overview
+
 Build a web application that allows users to upload drone log JSON files and visualize flight data on an interactive map with detailed reporting capabilities.
 
 ## Data Structure (Based on types.ts)
+
 ```typescript
 MissionLog {
   appVersion: number
@@ -30,36 +32,44 @@ FlightLog {
 ## Technology Stack
 
 ### Frontend Framework: **React 18 + TypeScript + Vite**
+
 - **Why**: Fast development, excellent TypeScript support, modern tooling
 - **Alternative considered**: Next.js (overkill for this single-page app)
 
 ### Mapping Library: **Leaflet + React-Leaflet**
+
 - **Why**: Lightweight, excellent plugin ecosystem, works well with multiple tile providers
-- **Plugins**: 
+- **Plugins**:
   - `leaflet-draw` for polygon display
   - `leaflet-polyline-decorator` for directional arrows on waypoint paths
 - **Alternative considered**: Mapbox GL (requires API key, more complex for this use case)
 
 ### State Management: **Zustand**
+
 - **Why**: Simple, TypeScript-friendly, minimal boilerplate
 - **Alternative considered**: Redux Toolkit (too heavy for this project)
 
 ### UI Components: **Mantine**
+
 - **Why**: Modern design, excellent TypeScript support, comprehensive component set
 - **Components needed**: FileButton, Table, Card, Group, Stack, Badge, Button, Tabs
 
 ### File Handling: **Native File API**
+
 - **Why**: Built-in browser support, no external dependencies needed
 
 ### Styling: **Mantine CSS + CSS Modules**
+
 - **Why**: Scoped styles, excellent integration with Mantine
 
 ### Build Tool: **Vite**
+
 - **Why**: Fast HMR, excellent TypeScript support, modern build tooling
 
 ## Application Architecture
 
 ### Component Structure
+
 ```
 src/
 ├── components/
@@ -90,33 +100,37 @@ src/
 ```
 
 ### State Management Structure
+
 ```typescript
 interface MissionStore {
   // Data
-  currentMission: MissionLog | null
-  
+  currentMission: MissionLog | null;
+
   // UI State
-  selectedLayers: Set<'dropPoints' | 'waypoints' | 'polygon'>
-  mapCenter: [number, number]
-  mapZoom: number
-  
+  selectedLayers: Set<"dropPoints" | "waypoints" | "polygon">;
+  mapCenter: [number, number];
+  mapZoom: number;
+
   // Actions
-  loadMission: (file: File) => Promise<void>
-  toggleLayer: (layer: string) => void
-  setMapView: (center: [number, number], zoom: number) => void
-  reset: () => void
+  loadMission: (file: File) => Promise<void>;
+  toggleLayer: (layer: string) => void;
+  setMapView: (center: [number, number], zoom: number) => void;
+  reset: () => void;
 }
 ```
 
 ## Implementation Plan
 
 ### Phase 1: Project Setup & Basic Structure
+
 1. **Initialize Vite React TypeScript project**
+
    ```bash
    npm create vite@latest drone-log-viewer -- --template react-ts
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install @mantine/core @mantine/hooks @mantine/dates
    npm install leaflet react-leaflet
@@ -129,6 +143,7 @@ interface MissionStore {
 4. **Configure TypeScript** - Copy existing types.ts and extend as needed
 
 ### Phase 2: File Upload & Data Processing
+
 1. **Create FileUploader component**
    - Drag & drop interface using Mantine FileButton
    - JSON validation against MissionLog schema
@@ -145,6 +160,7 @@ interface MissionStore {
    - Error states
 
 ### Phase 3: Map Implementation
+
 1. **MapViewer base component**
    - Leaflet map initialization
    - Responsive container
@@ -155,7 +171,7 @@ interface MissionStore {
    - Color-code by altitude or timestamp
    - Click for point details popup
 
-3. **WaypointsLayer component**  
+3. **WaypointsLayer component**
    - Render waypoints as connected polyline
    - Yellow line connecting waypoints in sequence
    - Directional arrows showing flight path
@@ -170,6 +186,7 @@ interface MissionStore {
    - Legend showing marker meanings
 
 ### Phase 4: Report Panel
+
 1. **MissionSummary component**
    - Display: droneName, fieldName, appVersion, pilotName
    - Date range: flightDate, startDate, endDate, calculated duration
@@ -182,6 +199,7 @@ interface MissionStore {
    - Min/max/average altitude
 
 ### Phase 5: UI/UX Polish
+
 1. **Responsive design** - Mobile-friendly layout
 2. **Loading states** - Skeleton loaders during file processing
 3. **Error handling** - User-friendly error messages
@@ -189,6 +207,7 @@ interface MissionStore {
 5. **Map controls** - Zoom to fit data, reset view, fullscreen mode
 
 ## File Structure
+
 ```
 drone-log-viewer/
 ├── public/
@@ -207,8 +226,9 @@ drone-log-viewer/
 ```
 
 ## Development Timeline
+
 - **Phase 1**: 1 day (setup)
-- **Phase 2**: 2 days (file handling)  
+- **Phase 2**: 2 days (file handling)
 - **Phase 3**: 3 days (mapping)
 - **Phase 4**: 2 days (reporting)
 - **Phase 5**: 2 days (polish)
@@ -216,13 +236,14 @@ drone-log-viewer/
 **Total: ~10 days**
 
 ## Key Features Summary
+
 ✅ **File Upload**: Drag & drop JSON file upload with validation  
 ✅ **Interactive Map**: Leaflet-based map with zoom, pan, layers  
 ✅ **Layer Toggle**: Switch between drop points, waypoints, field boundary  
 ✅ **Flight Path**: Connected waypoint visualization with directional indicators  
 ✅ **Mission Report**: Comprehensive flight statistics and metadata  
 ✅ **Responsive Design**: Works on desktop, tablet, and mobile  
-✅ **Error Handling**: Graceful handling of invalid files and missing data  
+✅ **Error Handling**: Graceful handling of invalid files and missing data
 
 ## Technical Decisions Rationale
 

@@ -1,55 +1,59 @@
-import React from 'react'
-import { Polyline, CircleMarker, Popup } from 'react-leaflet'
-import { useMissionStore } from '../../stores/missionStore'
+import React from "react";
+import { Polyline, CircleMarker, Popup } from "react-leaflet";
+import { useMissionStore } from "@/stores/missionStore";
 
 export function MissionWaypointsLayer() {
-  const { currentMission, selectedSourceFiles } = useMissionStore()
-  
-  if (!currentMission?.missionSettings) return null
-  
+  const { currentMission, selectedSourceFiles } = useMissionStore();
+
+  if (!currentMission?.missionSettings) return null;
+
   // Collect waypoints from enabled WDM files
   const wdmRoutes: Array<{
-    waypoints: Array<{ latitude: number; longitude: number; index: number }>
-    pathCoordinates: [number, number][]
-    filename: string
-    fieldName: string
-    color: string
-  }> = []
-  
+    waypoints: Array<{ latitude: number; longitude: number; index: number }>;
+    pathCoordinates: [number, number][];
+    filename: string;
+    fieldName: string;
+    color: string;
+  }> = [];
+
   currentMission.missionSettings.forEach((settings, settingsIndex) => {
-    const filename = settings.filename || `wdm-${settingsIndex}`
-    
+    const filename = settings.filename || `wdm-${settingsIndex}`;
+
     // Only show if this WDM file is enabled and has waypoints
-    if (selectedSourceFiles.has(filename) && settings.missionWaypoints && settings.missionWaypoints.length > 0) {
+    if (
+      selectedSourceFiles.has(filename) &&
+      settings.missionWaypoints &&
+      settings.missionWaypoints.length > 0
+    ) {
       // Use different colors for different WDM files
-      const hue = (settingsIndex * 120) % 360
-      const color = `hsl(${hue}, 70%, 50%)`
-      
+      const hue = (settingsIndex * 120) % 360;
+      const color = `hsl(${hue}, 70%, 50%)`;
+
       // Convert coordinate format from [lat, lng] to the expected format
       const waypoints = settings.missionWaypoints.map((coord, index) => ({
         latitude: coord[0],
         longitude: coord[1],
-        index: index + 1
-      }))
-      
+        index: index + 1,
+      }));
+
       // Create the path coordinates for the polyline
-      const pathCoordinates: [number, number][] = waypoints.map(point => [
+      const pathCoordinates: [number, number][] = waypoints.map((point) => [
         point.latitude,
-        point.longitude
-      ])
-      
+        point.longitude,
+      ]);
+
       wdmRoutes.push({
         waypoints,
         pathCoordinates,
         filename,
         fieldName: settings.info.name,
-        color
-      })
+        color,
+      });
     }
-  })
-  
-  if (wdmRoutes.length === 0) return null
-  
+  });
+
+  if (wdmRoutes.length === 0) return null;
+
   return (
     <>
       {wdmRoutes.map((route, routeIndex) => (
@@ -61,10 +65,10 @@ export function MissionWaypointsLayer() {
               color: route.color,
               weight: 2,
               opacity: 0.7,
-              dashArray: '10, 5' // Dashed line to distinguish from actual flight path
+              dashArray: "10, 5", // Dashed line to distinguish from actual flight path
             }}
           />
-          
+
           {/* Mission waypoint markers */}
           {route.waypoints.map((point) => (
             <CircleMarker
@@ -72,10 +76,10 @@ export function MissionWaypointsLayer() {
               center={[point.latitude, point.longitude]}
               pathOptions={{
                 fillColor: route.color,
-                color: '#ffffff',
+                color: "#ffffff",
                 weight: 1,
                 opacity: 1,
-                fillOpacity: 0.8
+                fillOpacity: 0.8,
               }}
               radius={6}
             >
@@ -87,7 +91,8 @@ export function MissionWaypointsLayer() {
                   <br />
                   <strong>Source:</strong> {route.filename}
                   <br />
-                  <strong>Location:</strong> {point.latitude.toFixed(6)}, {point.longitude.toFixed(6)}
+                  <strong>Location:</strong> {point.latitude.toFixed(6)},{" "}
+                  {point.longitude.toFixed(6)}
                   <br />
                   <em>Planned route from mission settings</em>
                 </div>
@@ -97,5 +102,5 @@ export function MissionWaypointsLayer() {
         </React.Fragment>
       ))}
     </>
-  )
+  );
 }

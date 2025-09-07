@@ -7,7 +7,7 @@ A web application for visualizing agricultural drone flight data with interactiv
 - **File Upload**: Drag & drop JSON log file upload with validation
 - **Interactive Map**: Leaflet-based map with zoom, pan, and layers
 - **Layer Toggle**: Switch between drop points, waypoints, and field boundary
-- **Flight Path**: Connected waypoint visualization with directional indicators  
+- **Flight Path**: Connected waypoint visualization with directional indicators
 - **Mission Report**: Comprehensive flight statistics and metadata
 - **Responsive Design**: Works on desktop, tablet, and mobile
 
@@ -51,33 +51,33 @@ The application expects JSON files with the following structure:
 
 ```typescript
 {
-  appVersion: number
-  droneName: string
-  fieldName: string
-  pilotName: string
-  uploaded: boolean
+  appVersion: number;
+  droneName: string;
+  fieldName: string;
+  pilotName: string;
+  uploaded: boolean;
   flightLog: {
     dropPoints: Array<{
-      latitude: number
-      longitude: number
-      altitude: number
-      date: string
-      heading: number
-      speed: number
-    }>
+      latitude: number;
+      longitude: number;
+      altitude: number;
+      date: string;
+      heading: number;
+      speed: number;
+    }>;
     waypoints: Array<{
-      latitude: number
-      longitude: number
-      altitude: number
-      date: string
-      heading: number
-      speed: number
-    }>
-    startDate: string
-    endDate: string
-    flightDate: string
-    polygon: string
-    trichogrammaBullets: number
+      latitude: number;
+      longitude: number;
+      altitude: number;
+      date: string;
+      heading: number;
+      speed: number;
+    }>;
+    startDate: string;
+    endDate: string;
+    flightDate: string;
+    polygon: string;
+    trichogrammaBullets: number;
   }
 }
 ```
@@ -110,6 +110,7 @@ src/
 ## Development Notes
 
 This application implements a complete drone log visualization solution with:
+
 - Type-safe data parsing and validation
 - Interactive mapping with Leaflet
 - Responsive design with Mantine UI

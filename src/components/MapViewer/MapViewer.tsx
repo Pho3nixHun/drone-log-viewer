@@ -1,12 +1,12 @@
-import { MapContainer, TileLayer } from 'react-leaflet'
-import { Box, LoadingOverlay } from '@mantine/core'
-import 'leaflet/dist/leaflet.css'
-import * as L from 'leaflet'
+import { MapContainer, TileLayer } from "react-leaflet";
+import { Box, LoadingOverlay } from "@mantine/core";
+import "leaflet/dist/leaflet.css";
+import * as L from "leaflet";
 
 // Fix for default markers in react-leaflet
-import markerIcon from 'leaflet/dist/images/marker-icon.png'
-import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
+import markerIconRetina from "leaflet/dist/images/marker-icon-2x.png";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DefaultIcon = (L as any).icon({
@@ -16,62 +16,73 @@ const DefaultIcon = (L as any).icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-})
+  shadowSize: [41, 41],
+});
 
-L.Marker.prototype.options.icon = DefaultIcon
+L.Marker.prototype.options.icon = DefaultIcon;
 
-import { useMissionStore } from '../../stores/missionStore'
-import { DropPointsLayer } from './DropPointsLayer'
-import { WaypointsLayer } from './WaypointsLayer'
-import { PolygonLayer } from './PolygonLayer'
-import { MissionWaypointsLayer } from './MissionWaypointsLayer'
-import { PolygonUnionLayer } from './PolygonUnionLayer'
-import HeatmapLayer from './HeatmapLayer'
+import { useMissionStore } from "@/stores/missionStore";
+import type { LayerType } from "@/types/mission";
+import { DropPointsLayer } from "./DropPointsLayer";
+import { WaypointsLayer } from "./WaypointsLayer";
+import { PolygonLayer } from "./PolygonLayer";
+import { MissionWaypointsLayer } from "./MissionWaypointsLayer";
+import { PolygonUnionLayer } from "./PolygonUnionLayer";
+import HeatmapLayer from "./HeatmapLayer";
 
 interface MapViewerProps {
-  height?: number | string
+  height?: number | string;
 }
 
 export function MapViewer({ height = 500 }: MapViewerProps) {
-  const { currentMission, mapCenter, mapZoom, selectedLayers, tileLayer, isLoading, heatmapData } = useMissionStore()
+  const {
+    currentMission,
+    mapCenter,
+    mapZoom,
+    selectedLayers,
+    tileLayer,
+    isLoading,
+    heatmapLayers,
+  } = useMissionStore();
 
   // Default center (Budapest, Hungary - close to the sample data)
-  const defaultCenter: [number, number] = [46.3314, 21.0679]
-  const center = mapCenter || defaultCenter
-  const zoom = mapCenter ? mapZoom : 6
+  const defaultCenter: [number, number] = [46.3314, 21.0679];
+  const center = mapCenter || defaultCenter;
+  const zoom = mapCenter ? mapZoom : 6;
 
   if (!currentMission) {
     return (
-      <Box 
-        h={height} 
-        style={{ 
-          border: '1px solid var(--mantine-color-gray-3)',
-          borderRadius: 'var(--mantine-radius-md)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: 'var(--mantine-color-gray-0)'
+      <Box
+        h={height}
+        style={{
+          border: "1px solid var(--mantine-color-gray-3)",
+          borderRadius: "var(--mantine-radius-md)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "var(--mantine-color-gray-0)",
         }}
       >
-        <div style={{ textAlign: 'center', color: 'var(--mantine-color-gray-6)' }}>
+        <div
+          style={{ textAlign: "center", color: "var(--mantine-color-gray-6)" }}
+        >
           Upload a drone log file to view the flight data on the map
         </div>
       </Box>
-    )
+    );
   }
 
   return (
     <Box pos="relative" h={height}>
       <LoadingOverlay visible={isLoading} />
-      
+
       <MapContainer
         center={center}
         zoom={zoom}
         maxZoom={25}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: "100%", width: "100%", zIndex: 0 }}
       >
-        {tileLayer === 'osm' ? (
+        {tileLayer === "osm" ? (
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -82,14 +93,23 @@ export function MapViewer({ height = 500 }: MapViewerProps) {
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           />
         )}
-        
-        {selectedLayers.has('dropPoints') && <DropPointsLayer />}
-        {selectedLayers.has('waypoints') && <WaypointsLayer />}
-        {selectedLayers.has('polygon') && <PolygonLayer />}
-        {selectedLayers.has('polygonUnion') && <PolygonUnionLayer />}
-        {selectedLayers.has('missionWaypoints') && <MissionWaypointsLayer />}
-        {selectedLayers.has('heatmap') && <HeatmapLayer densityMapData={heatmapData} />}
+
+        {selectedLayers.has("dropPoints") && <DropPointsLayer />}
+        {selectedLayers.has("waypoints") && <WaypointsLayer />}
+        {selectedLayers.has("polygon") && <PolygonLayer />}
+        {selectedLayers.has("polygonUnion") && <PolygonUnionLayer />}
+        {selectedLayers.has("missionWaypoints") && <MissionWaypointsLayer />}
+        {heatmapLayers.map(
+          (layer) =>
+            selectedLayers.has(`heatmap-${layer.id}` as LayerType) && (
+              <HeatmapLayer
+                key={layer.id}
+                densityMapData={layer.data}
+                insectsPerDrop={layer.parameters.insectsPerDrop}
+              />
+            ),
+        )}
       </MapContainer>
     </Box>
-  )
+  );
 }
