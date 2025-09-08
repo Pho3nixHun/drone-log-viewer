@@ -1,4 +1,5 @@
 import type { DropPoint, Waypoint } from "@/types/mission";
+import { convex, buffer, points } from "@turf/turf";
 
 export function getBounds(
   points: (DropPoint | Waypoint)[],
@@ -116,115 +117,39 @@ export function generatePolygonFromPoints(
   );
   if (validPoints.length < 3) return "";
 
-  // Create a convex hull of the drop points
-  const hullPoints = convexHull(validPoints);
+  try {
+    // Convert points to GeoJSON format for Turf.js
+    const turfPoints = points(
+      validPoints.map((p) => [p.longitude, p.latitude])
+    );
 
-  // Add 10m buffer to each point of the hull
-  const bufferDegrees = 0.00009; // roughly 10 meters
+    // Create a convex hull using Turf.js
+    const hull = convex(turfPoints);
+    if (!hull) return "";
 
-  // Calculate the centroid of the hull for buffer expansion
-  const centroidLat =
-    hullPoints.reduce((sum, p) => sum + p.latitude, 0) / hullPoints.length;
-  const centroidLng =
-    hullPoints.reduce((sum, p) => sum + p.longitude, 0) / hullPoints.length;
+    // Add 10m buffer using Turf.js
+    const bufferedHull = buffer(hull, 10, { units: "meters" });
+    if (!bufferedHull) return "";
 
-  // Expand each hull point outward from the centroid
-  const bufferedPoints = hullPoints.map((point) => {
-    const deltaLat = point.latitude - centroidLat;
-    const deltaLng = point.longitude - centroidLng;
+    // Extract coordinates from the buffered polygon
+    const coords = bufferedHull.geometry.coordinates[0];
+    
+    // Convert back to [lat, lng] format and create polygon string
+    const polygonPoints = coords
+      .slice(0, -1) // Remove the closing duplicate point
+      .map(([lng, lat]) => `${lat},${lng}`)
+      .join(";");
 
-    // Normalize and extend by buffer distance
-    const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
-    const normalizedLat = distance > 0 ? deltaLat / distance : 0;
-    const normalizedLng = distance > 0 ? deltaLng / distance : 0;
-
-    return {
-      latitude: point.latitude + normalizedLat * bufferDegrees,
-      longitude: point.longitude + normalizedLng * bufferDegrees,
-    };
-  });
-
-  // Close the polygon by adding the first point at the end
-  const polygonPoints = [...bufferedPoints, bufferedPoints[0]];
-
-  // Format as coordinate pairs separated by semicolons
-  const polygon = polygonPoints
-    .map((p) => `${p.latitude},${p.longitude}`)
-    .join(";");
-
-  return polygon;
-}
-
-// Convex hull algorithm using Graham scan
-function convexHull(
-  points: (DropPoint | Waypoint)[],
-): (DropPoint | Waypoint)[] {
-  if (points.length < 3) return points;
-
-  // Find the point with the lowest y-coordinate (and leftmost if tie)
-  let start = points[0];
-  for (let i = 1; i < points.length; i++) {
-    if (
-      points[i].latitude < start.latitude ||
-      (points[i].latitude === start.latitude &&
-        points[i].longitude < start.longitude)
-    ) {
-      start = points[i];
-    }
+    return polygonPoints;
+  } catch (error) {
+    console.warn("Error generating polygon with Turf.js:", error);
+    
+    // Fallback: return a simple bounding box polygon
+    const bounds = getBounds(validPoints);
+    if (!bounds) return "";
+    
+    const [[minLat, minLng], [maxLat, maxLng]] = bounds;
+    return `${minLat},${minLng};${maxLat},${minLng};${maxLat},${maxLng};${minLat},${maxLng}`;
   }
-
-  // Sort points by polar angle with respect to start point
-  const sortedPoints = points
-    .filter((p) => p !== start)
-    .sort((a, b) => {
-      const angleA = Math.atan2(
-        a.latitude - start.latitude,
-        a.longitude - start.longitude,
-      );
-      const angleB = Math.atan2(
-        b.latitude - start.latitude,
-        b.longitude - start.longitude,
-      );
-
-      if (angleA === angleB) {
-        // If angles are equal, sort by distance (closer points first)
-        const distA =
-          (a.latitude - start.latitude) ** 2 +
-          (a.longitude - start.longitude) ** 2;
-        const distB =
-          (b.latitude - start.latitude) ** 2 +
-          (b.longitude - start.longitude) ** 2;
-        return distA - distB;
-      }
-
-      return angleA - angleB;
-    });
-
-  // Graham scan to find convex hull
-  const hull: (DropPoint | Waypoint)[] = [start];
-
-  for (const point of sortedPoints) {
-    // Remove points that create right turn
-    while (
-      hull.length > 1 &&
-      crossProduct(hull[hull.length - 2], hull[hull.length - 1], point) <= 0
-    ) {
-      hull.pop();
-    }
-    hull.push(point);
-  }
-
-  return hull;
 }
 
-// Calculate cross product to determine turn direction
-function crossProduct(
-  o: DropPoint | Waypoint,
-  a: DropPoint | Waypoint,
-  b: DropPoint | Waypoint,
-): number {
-  return (
-    (a.longitude - o.longitude) * (b.latitude - o.latitude) -
-    (a.latitude - o.latitude) * (b.longitude - o.longitude)
-  );
-}

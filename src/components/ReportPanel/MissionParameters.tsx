@@ -60,7 +60,7 @@ export function MissionParameters() {
             {t("mission.lineSpacing")}
           </Text>
           <Text size="sm" c="dimmed">
-            {settings.missionParams.dDL}m
+            {settings.missionParams.dBL}m
           </Text>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -114,10 +114,10 @@ export function MissionParameters() {
       <Stack gap="md">
         <div>
           <Text size="lg" fw={600}>
-            Mission Parameters
+            {t("mission.parametersTitle")}
           </Text>
           <Text size="sm" c="dimmed">
-            WDM file settings and field configurations
+            {t("mission.parametersSubtitle")}
           </Text>
         </div>
 

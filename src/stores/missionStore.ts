@@ -10,6 +10,7 @@ import {
   parseMultipleJSONFiles,
   calculateMissionStats,
   FileParseError,
+  calculateDistanceUpToTime,
 } from "@/utils/fileParser";
 import {
   getMapCenter,
@@ -45,6 +46,8 @@ interface MissionStore {
   replayCurrentTime: number | null;
   replayStartTime: number | null;
   replayEndTime: number | null;
+  replayTimeElapsed: number; // Seconds since replay start
+  replayDistanceFlown: number; // Meters flown up to current time
 
   // Loading and Error States
   isLoading: boolean;
@@ -57,6 +60,8 @@ interface MissionStore {
   // Actions
   loadMission: (files: File | File[]) => Promise<void>;
   loadMissionSettings: (files: File | File[]) => Promise<void>;
+  appendMissionLogs: (files: File | File[]) => Promise<void>;
+  appendMissionSettings: (files: File | File[]) => Promise<void>;
   toggleLayer: (layer: LayerType) => void;
   toggleSourceFile: (sourceFile: string) => void;
   removeSourceFile: (sourceFile: string) => void;
@@ -96,6 +101,8 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
   replayCurrentTime: null,
   replayStartTime: null,
   replayEndTime: null,
+  replayTimeElapsed: 0,
+  replayDistanceFlown: 0,
   isLoading: false,
   error: null,
   webGPUSupported: null,
@@ -368,10 +375,28 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
       // Recalculate stats with the filtered data
       const updatedStats = calculateMissionStats(updatedMission);
 
+      // Recalculate replay time bounds with remaining data
+      const allPoints = [
+        ...filteredDropPoints,
+        ...filteredWaypoints,
+      ];
+
+      const timestamps = allPoints
+        .map((p) => new Date(p.date).getTime())
+        .filter((t) => !isNaN(t) && t > 946684800000) // Filter out dates before year 2000
+        .sort((a, b) => a - b);
+
+      const startTime = timestamps.length > 0 ? timestamps[0] : null;
+      const endTime =
+        timestamps.length > 0 ? timestamps[timestamps.length - 1] : null;
+
       set({
         currentMission: updatedMission,
         missionStats: updatedStats,
         selectedSourceFiles: newSelectedSourceFiles,
+        replayStartTime: startTime,
+        replayEndTime: endTime,
+        replayCurrentTime: startTime,
       });
     }
   },
@@ -393,6 +418,9 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     set({
       isReplaying: true,
       replayCurrentTime: replayStartTime,
+      timeRange: null, // Clear any existing time filter
+      replayTimeElapsed: 0,
+      replayDistanceFlown: 0,
     });
   },
 
@@ -405,6 +433,8 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     set({
       isReplaying: false,
       replayCurrentTime: replayStartTime,
+      replayTimeElapsed: 0,
+      replayDistanceFlown: 0,
     });
   },
 
@@ -413,7 +443,24 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
   },
 
   setReplayCurrentTime: (time: number) => {
-    set({ replayCurrentTime: time });
+    const { currentMission, replayStartTime } = get();
+    
+    if (!currentMission || !replayStartTime) {
+      set({ replayCurrentTime: time });
+      return;
+    }
+
+    // Calculate time elapsed in seconds
+    const timeElapsed = Math.max(0, (time - replayStartTime) / 1000);
+
+    // Calculate distance flown using the proper calculation from fileParser
+    const distanceFlown = calculateDistanceUpToTime(currentMission.flightLog.waypoints, time);
+
+    set({ 
+      replayCurrentTime: time,
+      replayTimeElapsed: timeElapsed,
+      replayDistanceFlown: distanceFlown,
+    });
   },
 
   addHeatmapLayer: (
@@ -511,8 +558,149 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
       replayCurrentTime: null,
       replayStartTime: null,
       replayEndTime: null,
+      replayTimeElapsed: 0,
+      replayDistanceFlown: 0,
       isLoading: false,
       error: null,
     });
+  },
+
+  appendMissionLogs: async (files: File | File[]) => {
+    const { currentMission } = get();
+    if (!currentMission) {
+      // If no mission exists, just load normally
+      return get().loadMission(files);
+    }
+
+    set({ isLoading: true, error: null });
+
+    try {
+      const fileArray = Array.isArray(files) ? files : [files];
+      const newMission = await parseMultipleJSONFiles(fileArray);
+
+      // Merge with existing mission
+      const mergedMission = {
+        ...currentMission,
+        sourceFiles: [...currentMission.sourceFiles, ...newMission.sourceFiles],
+        isMerged: true,
+        flightLog: {
+          ...currentMission.flightLog,
+          dropPoints: [...currentMission.flightLog.dropPoints, ...newMission.flightLog.dropPoints],
+          waypoints: [...currentMission.flightLog.waypoints, ...newMission.flightLog.waypoints],
+        },
+      };
+
+      // Recalculate stats with merged data
+      const updatedStats = calculateMissionStats(mergedMission);
+
+      // Update selected source files to include new files
+      const { selectedSourceFiles } = get();
+      const newSelectedSourceFiles = new Set(selectedSourceFiles);
+      newMission.sourceFiles.forEach(file => newSelectedSourceFiles.add(file));
+
+      set({
+        currentMission: mergedMission,
+        missionStats: updatedStats,
+        selectedSourceFiles: newSelectedSourceFiles,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      console.error("Failed to append mission logs:", error);
+      set({
+        isLoading: false,
+        error:
+          error instanceof FileParseError
+            ? error.message
+            : "Failed to append mission log files",
+      });
+    }
+  },
+
+  appendMissionSettings: async (files: File | File[]) => {
+    const { currentMission } = get();
+    if (!currentMission) {
+      set({
+        error:
+          "Please load mission log files first before uploading mission settings.",
+      });
+      return;
+    }
+
+    set({ isLoading: true, error: null });
+
+    try {
+      const fileArray = Array.isArray(files) ? files : [files];
+      const newMissionSettings: MissionSettings[] = [];
+
+      for (const file of fileArray) {
+        if (!file.name.endsWith(".wdm")) {
+          throw new Error(
+            `Please select WDM mission files. Invalid file: ${file.name}`,
+          );
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+          // 5MB limit
+          throw new Error(
+            `File size too large for ${file.name}. Please select a file smaller than 5MB`,
+          );
+        }
+
+        const text = await file.text();
+        const settings: MissionSettings = JSON.parse(text);
+
+        // Validate the structure
+        if (!settings.info || !settings.polygon || !settings.missionParams) {
+          throw new Error(`Invalid WDM file structure in ${file.name}`);
+        }
+
+        // Add filename to track which file this came from
+        settings.filename = file.name;
+
+        console.log(
+          "Mission settings loaded successfully:",
+          settings.info.name,
+          "from",
+          file.name,
+        );
+        newMissionSettings.push(settings);
+      }
+
+      // Merge with existing mission settings
+      const existingSettings = currentMission.missionSettings || [];
+      const mergedSettings = [...existingSettings, ...newMissionSettings];
+
+      const updatedMission = {
+        ...currentMission,
+        missionSettings: mergedSettings,
+      };
+
+      // Add new WDM files to selectedSourceFiles
+      const { selectedSourceFiles } = get();
+      const newSelectedSourceFiles = new Set(selectedSourceFiles);
+
+      newMissionSettings.forEach((settings) => {
+        if (settings.filename) {
+          newSelectedSourceFiles.add(settings.filename);
+        }
+      });
+
+      set({
+        currentMission: updatedMission,
+        selectedSourceFiles: newSelectedSourceFiles,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      console.error("Failed to append mission settings:", error);
+      set({
+        isLoading: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to append mission settings files",
+      });
+    }
   },
 }));

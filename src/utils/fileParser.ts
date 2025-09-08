@@ -14,7 +14,7 @@ export class FileParseError extends Error {
 }
 
 function interpolateTimestamps<T extends { date: string }>(
-  points: T[],
+  points: T[]
 ): { points: T[]; fixedCount: number } {
   if (points.length === 0) return { points, fixedCount: 0 };
 
@@ -93,7 +93,7 @@ export async function parseJSONFile(file: File): Promise<MissionLog> {
   if (file.size > 10 * 1024 * 1024) {
     // 10MB limit
     throw new FileParseError(
-      "File size too large. Please select a file smaller than 10MB",
+      "File size too large. Please select a file smaller than 10MB"
     );
   }
 
@@ -117,7 +117,7 @@ export async function parseJSONFile(file: File): Promise<MissionLog> {
 }
 
 export async function parseMultipleJSONFiles(
-  files: File[],
+  files: File[]
 ): Promise<MergedMission> {
   if (files.length === 0) {
     throw new FileParseError("No files provided");
@@ -135,7 +135,7 @@ export async function parseMultipleJSONFiles(
     const totalFixed = dropPointsFixed + waypointsFixed;
     if (totalFixed > 0) {
       console.warn(
-        `⚠️ Fixed ${totalFixed} invalid timestamps (${dropPointsFixed} drop points, ${waypointsFixed} waypoints) using interpolation. This data was missing and times are best-effort estimates.`,
+        `⚠️ Fixed ${totalFixed} invalid timestamps (${dropPointsFixed} drop points, ${waypointsFixed} waypoints) using interpolation. This data was missing and times are best-effort estimates.`
       );
     }
 
@@ -193,7 +193,9 @@ export async function parseMultipleJSONFiles(
     } catch (error) {
       console.error(`Failed to parse ${file.name}:`, error);
       throw new FileParseError(
-        `Failed to parse ${file.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Failed to parse ${file.name}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
     }
   }
@@ -201,7 +203,7 @@ export async function parseMultipleJSONFiles(
   const totalFixed = totalDropPointsFixed + totalWaypointsFixed;
   if (totalFixed > 0) {
     console.warn(
-      `⚠️ Fixed ${totalFixed} invalid timestamps across all files (${totalDropPointsFixed} drop points, ${totalWaypointsFixed} waypoints) using interpolation. This data was missing and times are best-effort estimates.`,
+      `⚠️ Fixed ${totalFixed} invalid timestamps across all files (${totalDropPointsFixed} drop points, ${totalWaypointsFixed} waypoints) using interpolation. This data was missing and times are best-effort estimates.`
     );
   }
 
@@ -238,10 +240,10 @@ export async function parseMultipleJSONFiles(
 
   // Sort by timestamp to maintain chronological order
   mergedDropPoints.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
   mergedWaypoints.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
   // Calculate merged dates
@@ -281,7 +283,7 @@ export async function parseMultipleJSONFiles(
       polygon: baseMission.flightLog.polygon,
       trichogrammaBullets: missions.reduce(
         (sum, m) => sum + (m.flightLog.trichogrammaBullets || 0),
-        0,
+        0
       ),
     },
   };
@@ -323,7 +325,7 @@ function validateMissionLog(data: unknown): void {
 
   // Create type assertion function for flight log arrays
   function assertFlightLogArrays(
-    log: Record<string, unknown>,
+    log: Record<string, unknown>
   ): asserts log is Record<string, unknown> & {
     dropPoints: unknown[];
     waypoints: unknown[];
@@ -348,7 +350,7 @@ function validateMissionLog(data: unknown): void {
 function assertPointObject(
   point: unknown,
   type: string,
-  index: number,
+  index: number
 ): asserts point is Record<string, unknown> {
   if (!point || typeof point !== "object") {
     throw new FileParseError(`Invalid ${type} structure at index ${index}`);
@@ -360,11 +362,11 @@ function assertHasProperty<T extends Record<string, unknown>, K extends string>(
   obj: T,
   property: K,
   type: string,
-  index: number,
+  index: number
 ): asserts obj is T & Record<K, unknown> {
   if (!(property in obj)) {
     throw new FileParseError(
-      `Missing ${property} in ${type} at index ${index}`,
+      `Missing ${property} in ${type} at index ${index}`
     );
   }
 }
@@ -374,18 +376,18 @@ function assertValidCoordinate(
   value: unknown,
   property: "latitude" | "longitude",
   type: string,
-  index: number,
+  index: number
 ): asserts value is number {
   if (typeof value !== "number") {
     throw new FileParseError(
-      `Invalid ${property} type in ${type} at index ${index}`,
+      `Invalid ${property} type in ${type} at index ${index}`
     );
   }
 
   const range = property === "latitude" ? [-90, 90] : [-180, 180];
   if (value < range[0] || value > range[1]) {
     throw new FileParseError(
-      `Invalid ${property} range in ${type} at index ${index}`,
+      `Invalid ${property} range in ${type} at index ${index}`
     );
   }
 }
@@ -443,7 +445,7 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
     altitudes.reduce((sum, alt) => sum + alt, 0) / altitudes.length;
 
   // Calculate speed statistics
-  const speeds = allPoints.map((p) => p.speed || 0);
+  const speeds = allPoints.map((p) => p.speed || 0).filter((s) => s > 0);
   const averageSpeed =
     speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length;
 
@@ -477,43 +479,71 @@ export function calculateMissionStats(mission: MissionLog): MissionStats {
 function calculateTotalDistance(waypoints: unknown[]): number {
   if (waypoints.length < 2) return 0;
 
-  let totalDistance = 0;
-  for (let i = 1; i < waypoints.length; i++) {
-    const prev = waypoints[i - 1];
-    const curr = waypoints[i];
+  // Group waypoints by source file
+  const waypointsBySource = new Map<string, unknown[]>();
 
-    // Type guards
+  for (const waypoint of waypoints) {
     if (
-      prev &&
-      typeof prev === "object" &&
-      "latitude" in prev &&
-      "longitude" in prev &&
-      curr &&
-      typeof curr === "object" &&
-      "latitude" in curr &&
-      "longitude" in curr &&
-      typeof prev.latitude === "number" &&
-      typeof prev.longitude === "number" &&
-      typeof curr.latitude === "number" &&
-      typeof curr.longitude === "number"
+      waypoint &&
+      typeof waypoint === "object" &&
+      "sourceFile" in waypoint &&
+      "latitude" in waypoint &&
+      "longitude" in waypoint &&
+      typeof waypoint.latitude === "number" &&
+      typeof waypoint.longitude === "number"
     ) {
-      totalDistance += calculateDistance(
-        prev.latitude,
-        prev.longitude,
-        curr.latitude,
-        curr.longitude,
-      );
+      const sourceFile = (waypoint.sourceFile as string) || "unknown";
+      if (!waypointsBySource.has(sourceFile)) {
+        waypointsBySource.set(sourceFile, []);
+      }
+      waypointsBySource.get(sourceFile)!.push(waypoint);
     }
   }
+
+  let totalDistance = 0;
+
+  // Calculate distance for each source file separately
+  for (const sourceWaypoints of waypointsBySource.values()) {
+    if (sourceWaypoints.length < 2) continue;
+
+    for (let i = 1; i < sourceWaypoints.length; i++) {
+      const prev = sourceWaypoints[i - 1];
+      const curr = sourceWaypoints[i];
+
+      // Type guards (we already validated these above, but TypeScript needs them)
+      if (
+        prev &&
+        typeof prev === "object" &&
+        "latitude" in prev &&
+        "longitude" in prev &&
+        curr &&
+        typeof curr === "object" &&
+        "latitude" in curr &&
+        "longitude" in curr &&
+        typeof prev.latitude === "number" &&
+        typeof prev.longitude === "number" &&
+        typeof curr.latitude === "number" &&
+        typeof curr.longitude === "number"
+      ) {
+        totalDistance += calculateDistance(
+          prev.latitude,
+          prev.longitude,
+          curr.latitude,
+          curr.longitude
+        );
+      }
+    }
+  }
+
   return Math.round(totalDistance);
 }
 
 // Haversine formula for calculating distance between two coordinates
-function calculateDistance(
+export function calculateDistance(
   lat1: number,
   lon1: number,
   lat2: number,
-  lon2: number,
+  lon2: number
 ): number {
   const R = 6371000; // Earth's radius in meters
   const φ1 = (lat1 * Math.PI) / 180;
@@ -527,6 +557,66 @@ function calculateDistance(
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return R * c;
+}
+
+/**
+ * Calculate distance flown up to a specific time during replay
+ * Groups waypoints by source file and calculates sequential distances
+ */
+export function calculateDistanceUpToTime(
+  waypoints: Array<{
+    latitude: number;
+    longitude: number;
+    date: string;
+    sourceFile?: string;
+  }>,
+  maxTime: number
+): number {
+  if (waypoints.length < 2) return 0;
+
+  // Filter waypoints up to maxTime and group by source file
+  const waypointsBySource = new Map<
+    string,
+    Array<{ latitude: number; longitude: number; date: string }>
+  >();
+
+  for (const waypoint of waypoints) {
+    const pointTime = new Date(waypoint.date).getTime();
+    if (isNaN(pointTime) || pointTime > maxTime) continue;
+    if (waypoint.latitude === 0 && waypoint.longitude === 0) continue;
+
+    const sourceFile = waypoint.sourceFile || "unknown";
+    if (!waypointsBySource.has(sourceFile)) {
+      waypointsBySource.set(sourceFile, []);
+    }
+    waypointsBySource.get(sourceFile)!.push(waypoint);
+  }
+
+  let totalDistance = 0;
+
+  // Calculate distance for each source file separately
+  for (const sourceWaypoints of waypointsBySource.values()) {
+    if (sourceWaypoints.length < 2) continue;
+
+    // Sort by date to ensure correct order
+    const sortedWaypoints = sourceWaypoints.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    for (let i = 1; i < sortedWaypoints.length; i++) {
+      const prev = sortedWaypoints[i - 1];
+      const curr = sortedWaypoints[i];
+
+      totalDistance += calculateDistance(
+        prev.latitude,
+        prev.longitude,
+        curr.latitude,
+        curr.longitude
+      );
+    }
+  }
+
+  return totalDistance;
 }
 
 function calculateCoveredAreaHectares(dropPoints: unknown[]): number {
@@ -545,7 +635,7 @@ function calculateCoveredAreaHectares(dropPoints: unknown[]): number {
         p.latitude !== 0 &&
         p.longitude !== 0
       );
-    },
+    }
   );
   if (validPoints.length < 3) return 0;
 
@@ -596,7 +686,7 @@ function calculateDropDistances(dropPoints: unknown[]): {
         p.latitude !== 0 &&
         p.longitude !== 0
       );
-    },
+    }
   );
   if (validPoints.length < 2) {
     return { averageDropDistance: 0, averageDropLineDistance: 0 };
@@ -604,7 +694,7 @@ function calculateDropDistances(dropPoints: unknown[]): {
 
   // Sort points by timestamp to get proper sequence
   const sortedPoints = validPoints.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
   // Calculate distances between consecutive drops
@@ -616,7 +706,7 @@ function calculateDropDistances(dropPoints: unknown[]): {
       prev.latitude,
       prev.longitude,
       curr.latitude,
-      curr.longitude,
+      curr.longitude
     );
     dropDistances.push(distance);
   }
@@ -654,7 +744,7 @@ function calculateDropDistances(dropPoints: unknown[]): {
       prevPoint.latitude,
       prevPoint.longitude,
       currPoint.latitude,
-      currPoint.longitude,
+      currPoint.longitude
     );
 
     // If time gap or distance is too large, start a new drop-line
@@ -683,7 +773,7 @@ function calculateDropDistances(dropPoints: unknown[]): {
           prev.latitude,
           prev.longitude,
           curr.latitude,
-          curr.longitude,
+          curr.longitude
         );
         allDropLineDistances.push(distance);
       }
@@ -737,7 +827,7 @@ function calculateMaxDropPerMinute(dropPoints: unknown[]): number {
       timestamp.getMonth(),
       timestamp.getDate(),
       timestamp.getHours(),
-      timestamp.getMinutes(),
+      timestamp.getMinutes()
     ).toISOString();
 
     dropsPerMinute[minuteKey] = (dropsPerMinute[minuteKey] || 0) + 1;

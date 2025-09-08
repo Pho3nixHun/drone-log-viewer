@@ -1,17 +1,34 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { centroid, polygon } from "@turf/turf";
 import type { MergedMission } from "@/types/mission";
 import { calculatePolygonUnion, calculatePolygonArea } from "./polygonUtils";
 
-// Utility function to calculate polygon centroid
+// Utility function to calculate polygon centroid using Turf.js
 function calculateCentroid(coords: [number, number][]): [number, number] {
-  let x = 0,
-    y = 0;
-  for (const [lng, lat] of coords) {
-    x += lng;
-    y += lat;
+  try {
+    // Convert to GeoJSON format [lng, lat] and ensure polygon is closed
+    const geoCoords = coords.map(([lng, lat]) => [lng, lat]);
+    if (
+      geoCoords[0][0] !== geoCoords[geoCoords.length - 1][0] ||
+      geoCoords[0][1] !== geoCoords[geoCoords.length - 1][1]
+    ) {
+      geoCoords.push(geoCoords[0]);
+    }
+
+    const poly = polygon([geoCoords]);
+    const center = centroid(poly);
+    return center.geometry.coordinates as [number, number];
+  } catch (error) {
+    console.warn("Error calculating centroid with Turf.js:", error);
+    // Fallback to simple average calculation
+    let x = 0, y = 0;
+    for (const [lng, lat] of coords) {
+      x += lng;
+      y += lat;
+    }
+    return [x / coords.length, y / coords.length];
   }
-  return [x / coords.length, y / coords.length];
 }
 
 interface ShapefileFeature {

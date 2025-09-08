@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { useMissionStore } from "@/stores/missionStore";
 import { formatDistance } from "@/utils/mapHelpers";
 import { formatDuration } from "@/utils/dateHelpers";
-import { calculateTotalFieldArea } from "@/utils/polygonUtils";
+import { calculateTotalWDMArea } from "@/utils/polygonUtils";
 
 export function FlightStats() {
   const { currentMission, missionStats } = useMissionStore();
@@ -22,7 +22,7 @@ export function FlightStats() {
 
   // Calculate total field area from WDM files (handling overlaps)
   const totalFieldArea = currentMission.missionSettings
-    ? calculateTotalFieldArea(currentMission.missionSettings)
+    ? calculateTotalWDMArea(currentMission.missionSettings)
     : 0;
 
   const primaryStats = [
@@ -38,7 +38,7 @@ export function FlightStats() {
       label: t("map.waypoints"),
       value: missionStats.waypointsCount.toLocaleString(),
       color: "yellow",
-      subtitle: "GPS navigation points",
+      subtitle: t("stats.waypointsSubtitle"),
     },
     {
       icon: IconRuler,
@@ -56,17 +56,17 @@ export function FlightStats() {
     },
     {
       icon: IconRoute,
-      label: "Max Drops/Minute",
+      label: t("stats.maxDropsPerMinute"),
       value: `${missionStats.maxDropPerMinute}/min`,
       color: "red",
-      subtitle: "Peak application rate during mission",
+      subtitle: t("stats.maxDropsPerMinuteSubtitle"),
     },
     {
       icon: IconClock,
       label: t("mission.duration"),
       value: formatDuration(missionStats.flightDuration),
       color: "indigo",
-      subtitle: "Total flight time",
+      subtitle: t("stats.totalFlightTime"),
     },
   ];
 
@@ -77,10 +77,10 @@ export function FlightStats() {
           ...primaryStats,
           {
             icon: IconMap2,
-            label: "Total Field Area",
+            label: t("stats.totalFieldArea"),
             value: `${totalFieldArea.toFixed(2)} ha`,
             color: "teal",
-            subtitle: "Combined mission coverage (union of polygons)",
+            subtitle: t("stats.totalFieldAreaSubtitle"),
           },
         ]
       : primaryStats;
@@ -93,7 +93,7 @@ export function FlightStats() {
             {t("stats.title")}
           </Text>
           <Text size="sm" c="dimmed">
-            Flight performance and log data analysis
+            {t("stats.pageSubtitle")}
           </Text>
         </div>
 

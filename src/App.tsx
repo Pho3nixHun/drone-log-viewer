@@ -3,7 +3,6 @@ import {
   MantineProvider,
   Container,
   Stack,
-  Grid,
   Paper,
   Box,
 } from "@mantine/core";
@@ -12,9 +11,7 @@ import { MainLayout } from "./components/Layout/MainLayout";
 import { FileUploader } from "./components/FileUploader/FileUploader";
 import { MapViewer } from "./components/MapViewer/MapViewer";
 import { MapControlsSidebar } from "./components/MapViewer/MapControlsSidebar";
-import { MissionParameters } from "./components/ReportPanel/MissionParameters";
-import { MissionSummary } from "./components/ReportPanel/MissionSummary";
-import { FlightStats } from "./components/ReportPanel/FlightStats";
+import { ReportPanel } from "./components/ReportPanel/ReportPanel";
 import { useMissionStore } from "./stores/missionStore";
 import "./i18n/i18n";
 
@@ -65,19 +62,9 @@ function App() {
                     </Stack>
                   </Box>
 
-                  {/* Reports Section - Mission Parameters on Top, Summary and Stats Below */}
+                  {/* Reports Section */}
                   <Box p="lg">
-                    <Grid gutter="xl">
-                      <Grid.Col span={12}>
-                        <MissionParameters />
-                      </Grid.Col>
-                      <Grid.Col span={6}>
-                        <MissionSummary />
-                      </Grid.Col>
-                      <Grid.Col span={6}>
-                        <FlightStats />
-                      </Grid.Col>
-                    </Grid>
+                    <ReportPanel />
                   </Box>
                 </Stack>
               </Paper>

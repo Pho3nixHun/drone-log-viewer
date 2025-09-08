@@ -52,7 +52,7 @@ export function MissionSummary() {
             </div>
             <div style={{ textAlign: "right" }}>
               <Text size="xs" c="dimmed">
-                App Version
+                {t("mission.appVersion")}
               </Text>
               <Text size="sm">{currentMission.appVersion}</Text>
             </div>
@@ -100,7 +100,7 @@ export function MissionSummary() {
             <IconClock size={16} color="var(--mantine-color-orange-5)" />
             <div style={{ flex: 1 }}>
               <Text size="sm" fw={500}>
-                Start Time
+                {t("mission.startTime")}
               </Text>
               <Text size="sm" c="dimmed">
                 {formatDate(flightLog.startDate)}
@@ -112,7 +112,7 @@ export function MissionSummary() {
             <IconClock size={16} color="var(--mantine-color-orange-5)" />
             <div style={{ flex: 1 }}>
               <Text size="sm" fw={500}>
-                End Time
+                {t("mission.endTime")}
               </Text>
               <Text size="sm" c="dimmed">
                 {formatDate(flightLog.endDate)}

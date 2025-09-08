@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
+import { useTranslation } from "react-i18next";
 import L from "leaflet";
 import type { DensityMapData } from "@/utils/heatmapUtils";
 import { calculateLocalDensityPerArea } from "@/utils/heatmapUtils";
@@ -17,6 +18,7 @@ export default function HeatmapLayer({
   insectsPerDrop = 1000,
 }: HeatmapLayerProps) {
   const map = useMap();
+  const { t } = useTranslation();
   const imageOverlayRef = useRef<L.ImageOverlay | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -150,9 +152,9 @@ export default function HeatmapLayer({
         // Create tooltip content
         const tooltipContent = `
           <div style="font-size: 12px; line-height: 1.4;">
-            <div><strong>GPS:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
-            <div><strong>Density:</strong> ${densityValue.toFixed(2)}</div>
-            <div><strong>Insects/m²:</strong> ${densityResult.insectsPerSquareMeter.toFixed(1)}</div>
+            <div><strong>${t("heatmap.tooltipGPS")}:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+            <div><strong>${t("heatmap.tooltipDensity")}:</strong> ${densityValue.toFixed(2)}</div>
+            <div><strong>${t("heatmap.tooltipInsectsPerM2")}:</strong> ${densityResult.insectsPerSquareMeter.toFixed(1)}</div>
           </div>
         `;
 
@@ -202,7 +204,7 @@ export default function HeatmapLayer({
         imageOverlayRef.current = null;
       }
     };
-  }, [densityMapData, opacity, map, insectsPerDrop]);
+  }, [densityMapData, opacity, map, insectsPerDrop, t]);
 
   // Cleanup on unmount
   useEffect(() => {

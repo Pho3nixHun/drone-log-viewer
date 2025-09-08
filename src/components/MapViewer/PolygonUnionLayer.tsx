@@ -3,7 +3,6 @@ import { useMissionStore } from "@/stores/missionStore";
 import {
   calculatePolygonUnion,
   calculatePolygonArea,
-  squareDegreesToHectares,
 } from "@/utils/polygonUtils";
 
 export function PolygonUnionLayer() {
@@ -33,11 +32,8 @@ export function PolygonUnionLayer() {
 
   // Calculate the union polygon
   const unionPolygon = calculatePolygonUnion(enabledPolygons);
-  const unionArea = calculatePolygonArea(unionPolygon);
-  const avgLatitude =
-    unionPolygon.reduce((sum, coord) => sum + coord[0], 0) /
-    unionPolygon.length;
-  const areaHectares = squareDegreesToHectares(unionArea, avgLatitude);
+  // calculatePolygonArea now returns hectares directly
+  const areaHectares = calculatePolygonArea(unionPolygon);
 
   return (
     <Polygon

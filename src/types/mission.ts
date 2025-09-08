@@ -21,8 +21,8 @@ export interface MissionSettings {
   polygon: [number, number][];
   missionWaypoints: [number, number][];
   missionParams: {
-    dDL: number; // line spacing in meters
-    dTFB: number; // drop distance (format unknown)
+    dBL: number; // distance between lines in meters
+    dTFB: number; // distance to field boundaries in meters
     linesOffset: number;
     startingPos: number; // corner to start from (1-4)
     altitude: number; // altitude in meters

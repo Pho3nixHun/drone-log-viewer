@@ -8,6 +8,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useMissionStore } from "@/stores/missionStore";
 import { formatTimeOnly } from "@/utils/dateHelpers";
+import { formatDistance } from "@/utils/mapHelpers";
 
 export function ReplayControls() {
   const {
@@ -17,6 +18,8 @@ export function ReplayControls() {
     replayCurrentTime,
     replayStartTime,
     replayEndTime,
+    replayTimeElapsed,
+    replayDistanceFlown,
     startReplay,
     pauseReplay,
     resetReplay,
@@ -155,6 +158,26 @@ export function ReplayControls() {
           🔴 {visibleCounts.dropPoints} | 🟡 {visibleCounts.waypoints}
         </Text>
       </Box>
+
+      {/* Time elapsed and distance flown during replay */}
+      {isReplaying && (
+        <Box
+          mb="sm"
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "16px",
+            fontSize: "12px",
+          }}
+        >
+          <Text size="xs" c="blue" fw={500}>
+            ⏱️ {Math.floor(replayTimeElapsed / 60)}:{String(Math.floor(replayTimeElapsed % 60)).padStart(2, '0')}
+          </Text>
+          <Text size="xs" c="green" fw={500}>
+            📏 {formatDistance(replayDistanceFlown)}
+          </Text>
+        </Box>
+      )}
 
       <Box mb="sm" style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <Button
